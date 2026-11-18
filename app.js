@@ -107,6 +107,8 @@
 
   function traducirError(error) {
     const m = error?.message || String(error);
+    if (/no autorizado|database error|unexpected_failure|saving new user|granting user/i.test(m) || error?.status === 500)
+      return 'Este correo no está autorizado. Usa tu correo @farmaciasuno.com.sv';
     if (/rate limit|security purposes/i.test(m)) return 'Demasiados intentos. Espera un momento antes de pedir otro código.';
     if (/timeout|504|sending|smtp|confirmation email|magic link email/i.test(m) || error?.status === 504)
       return 'No se pudo enviar el correo con el código. Intenta de nuevo en unos minutos o avisa al administrador.';

@@ -9,7 +9,7 @@ Portal web para que las farmacias reporten diferencias en pedidos (faltantes, so
 
 | Rol | Qué hace |
 |---|---|
-| **Farmacia** (cualquier correo que no esté en la lista de atención) | Entra con código al correo, registra el nombre de su farmacia la primera vez, crea tickets y ve solo **sus** tickets y la respuesta de atención. |
+| **Farmacia** (correos `@farmaciasuno.com.sv` que no estén en la lista de atención) | Entra con código al correo, registra el nombre de su farmacia la primera vez, crea tickets y ve solo **sus** tickets y la respuesta de atención. |
 | **Atención** (correos en la tabla `staff`) | Ve todos los tickets, filtra, cambia estatus, escribe una nota para la farmacia, exporta a Excel y administra el catálogo. |
 | **Admin** (`staff.es_admin = true`) | Además, agrega/quita usuarios de atención. |
 
@@ -56,3 +56,8 @@ En la pestaña **Catálogo** (usuarios de atención) sube un `.xlsx` o `.csv` co
 Los tickets se crean con la función `crear_ticket()` (todo o nada). Las farmacias no pueden modificar tickets; atención solo puede cambiar `estatus` y `nota_atencion`.
 
 `config.js` contiene la clave *publishable* de Supabase: es pública por diseño; la seguridad la dan las políticas RLS.
+
+## Filtro de dominio
+
+Solo pueden entrar correos `@farmaciasuno.com.sv` y los correos dados de alta en **Usuarios de atención**.
+Se aplica en la base de datos (triggers `trg_bloquear_dominio_*` sobre `auth.users` y `auth.one_time_tokens`), así que a un correo no autorizado no se le crea cuenta ni se le envía código. La regla está en la función `public.correo_permitido()`.
