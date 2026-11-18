@@ -262,6 +262,7 @@
     cod.focus();
   }
   $('#btnAddItem').addEventListener('click', addItem);
+  $('fieldset.origen').addEventListener('change', (e) => e.currentTarget.classList.remove('invalid'));
 
   $('#formTicket').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -274,10 +275,14 @@
     if (items.some((i) => !i.descripcion)) return msg($('#ticketMsg'), 'Hay productos sin descripción.', 'err');
     if (items.some((i) => !(i.cantidad > 0))) return msg($('#ticketMsg'), 'Las cantidades deben ser mayores a 0.', 'err');
 
+    const origen = $('input[name=tOrigen]:checked')?.value;
+    $('fieldset.origen').classList.toggle('invalid', !origen);
+    if (!origen) return msg($('#ticketMsg'), 'Selecciona el origen del pedido: CEDI o AMERICANA.', 'err');
     const btn = $('#btnSubmitTicket'); btn.disabled = true;
     msg($('#ticketMsg'), 'Enviando…');
     const { data, error } = await sb.rpc('crear_ticket', {
       p_motivo: $('#tMotivo').value,
+      p_origen: origen,
       p_folio: $('#tFolio').value,
       p_fecha: $('#tFecha').value,
       p_observaciones: $('#tObs').value,
@@ -296,15 +301,15 @@
     const box = $('#myTickets');
     box.innerHTML = '<p class="muted">Cargando…</p>';
     const { data, error } = await sb.from('tickets')
-      .select('id, motivo, folio, fecha_recepcion, estatus, nota_atencion, created_at, updated_at, ticket_items(count)')
+      .select('id, motivo, origen, folio, fecha_recepcion, estatus, nota_atencion, created_at, updated_at, ticket_items(count)')
       .eq('user_id', state.user.id).order('created_at', { ascending: false }).limit(300);
     if (error) return (box.innerHTML = `<p class="msg err">${esc(error.message)}</p>`);
     if (!data.length) return (box.innerHTML = '<p class="muted">Aún no has creado tickets.</p>');
     box.innerHTML = `<table><thead><tr>
-      <th>#</th><th>Creado</th><th>Motivo</th><th>Folio</th><th>Recibido</th><th>Productos</th><th>Estatus</th><th>Respuesta</th>
+      <th>#</th><th>Creado</th><th>Motivo</th><th>Origen</th><th>Folio</th><th>Recibido</th><th>Productos</th><th>Estatus</th><th>Respuesta</th>
     </tr></thead><tbody>${data.map((t) => `
       <tr class="clickable" data-id="${t.id}">
-        <td>${t.id}</td><td>${fmtDate(t.created_at)}</td><td>${esc(MOTIVOS[t.motivo])}</td>
+        <td>${t.id}</td><td>${fmtDate(t.created_at)}</td><td>${esc(MOTIVOS[t.motivo])}</td><td>${t.origen ? `<span class="pill-origen">${esc(t.origen)}</span>` : ''}</td>
         <td>${esc(t.folio)}</td><td>${fmtDate(t.fecha_recepcion)}</td>
         <td>${t.ticket_items?.[0]?.count ?? ''}</td><td>${badge(t.estatus)}</td>
         <td class="trunc">${esc(t.nota_atencion || '')}</td>
@@ -321,10 +326,12 @@
     const box = $('#staffTickets');
     box.innerHTML = '<p class="muted">Cargando…</p>';
     let q = sb.from('tickets')
-      .select('id, email, farmacia, cod_suc, zona, ruta, motivo, folio, fecha_recepcion, estatus, atendido_por, created_at, updated_at, ticket_items(count)')
+      .select('id, email, farmacia, cod_suc, zona, ruta, motivo, origen, folio, fecha_recepcion, estatus, atendido_por, created_at, updated_at, ticket_items(count)')
       .order('created_at', { ascending: false }).limit(1000);
     const fe = $('#fEstatus').value, fm = $('#fMotivo').value, fz = $('#fZona').value;
     if (fz) q = q.eq('zona', fz);
+    const fo = $('#fOrigen').value;
+    if (fo) q = q.eq('origen', fo);
     if (fe) q = q.eq('estatus', fe);
     if (fm) q = q.eq('motivo', fm);
     const { data, error } = await q;
@@ -359,12 +366,12 @@
     const data = filteredStaffTickets();
     if (!data.length) return (box.innerHTML = '<p class="muted">No hay tickets con esos filtros.</p>');
     box.innerHTML = `<table><thead><tr>
-      <th>#</th><th>Creado</th><th>Farmacia</th><th>Motivo</th><th>Folio</th><th>Recibido</th><th>Prod.</th><th>Estatus</th><th>Atendió</th>
+      <th>#</th><th>Creado</th><th>Farmacia</th><th>Motivo</th><th>Origen</th><th>Folio</th><th>Recibido</th><th>Prod.</th><th>Estatus</th><th>Atendió</th>
     </tr></thead><tbody>${data.map((t) => `
       <tr class="clickable" data-id="${t.id}">
         <td>${t.id}</td><td>${fmtDate(t.created_at)}</td>
         <td><div>${esc(t.farmacia)} ${t.cod_suc ? `<small class="muted">${esc(t.cod_suc)}</small>` : ''}</div><small class="muted">${esc([t.zona, t.ruta].filter(Boolean).join(' · ') || t.email)}</small></td>
-        <td>${esc(MOTIVOS[t.motivo])}</td><td>${esc(t.folio)}</td><td>${fmtDate(t.fecha_recepcion)}</td>
+        <td>${esc(MOTIVOS[t.motivo])}</td><td>${t.origen ? `<span class="pill-origen">${esc(t.origen)}</span>` : ''}</td><td>${esc(t.folio)}</td><td>${fmtDate(t.fecha_recepcion)}</td>
         <td>${t.ticket_items?.[0]?.count ?? ''}</td><td>${badge(t.estatus)}</td>
         <td><small>${esc(t.atendido_por || '')}</small></td>
       </tr>`).join('')}</tbody></table>`;
@@ -372,6 +379,7 @@
   $('#fEstatus').addEventListener('change', loadStaffTickets);
   $('#fMotivo').addEventListener('change', loadStaffTickets);
   $('#fZona').addEventListener('change', loadStaffTickets);
+  $('#fOrigen').addEventListener('change', loadStaffTickets);
   async function loadZonas() {
     const { data } = await sb.from('sucursales').select('zona');
     const zonas = [...new Set((data || []).map((x) => x.zona).filter(Boolean))].sort();
@@ -391,15 +399,15 @@
     const rows = [];
     for (let i = 0; i < ids.length; i += 200) {
       const { data, error } = await sb.from('tickets')
-        .select('id, created_at, farmacia, cod_suc, zona, ruta, email, motivo, folio, fecha_recepcion, estatus, nota_atencion, atendido_por, ticket_items(codigo, descripcion, laboratorio, factor, cantidad)')
+        .select('id, created_at, farmacia, cod_suc, zona, ruta, email, motivo, origen, folio, fecha_recepcion, estatus, nota_atencion, atendido_por, ticket_items(codigo, descripcion, laboratorio, factor, cantidad)')
         .in('id', ids.slice(i, i + 200)).order('id');
       if (error) return alert(error.message);
       for (const t of data) for (const it of t.ticket_items) {
-        rows.push([t.id, t.created_at.slice(0, 10), t.cod_suc || '', t.farmacia, t.zona || '', t.ruta || '', t.email, MOTIVOS[t.motivo], t.folio, t.fecha_recepcion,
+        rows.push([t.id, t.created_at.slice(0, 10), t.cod_suc || '', t.farmacia, t.zona || '', t.ruta || '', t.email, MOTIVOS[t.motivo], t.origen || '', t.folio, t.fecha_recepcion,
           it.codigo, it.descripcion, it.laboratorio || '', it.factor ?? '', it.cantidad, ESTATUS[t.estatus], t.nota_atencion || '', t.atendido_por || '']);
       }
     }
-    const head = ['Ticket', 'Creado', 'Cód. sucursal', 'Sucursal', 'Zona', 'Ruta', 'Correo', 'Motivo', 'Folio', 'Fecha recepción', 'Código', 'Descripción', 'Laboratorio', 'Factor', 'Cantidad', 'Estatus', 'Nota atención', 'Atendió'];
+    const head = ['Ticket', 'Creado', 'Cód. sucursal', 'Sucursal', 'Zona', 'Ruta', 'Correo', 'Motivo', 'Origen', 'Folio', 'Fecha recepción', 'Código', 'Descripción', 'Laboratorio', 'Factor', 'Cantidad', 'Estatus', 'Nota atención', 'Atendió'];
     const ws = XLSX.utils.aoa_to_sheet([head, ...rows]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Tickets');
@@ -423,6 +431,7 @@
         <div><small class="muted">Sucursal</small><div>${esc(t.farmacia)}${t.cod_suc ? ` (${esc(t.cod_suc)})` : ''}</div><small class="muted">${esc(t.email)}</small></div>
         ${t.zona || t.ruta ? `<div><small class="muted">Zona / Ruta</small><div>${esc([t.zona, t.ruta].filter(Boolean).join(' · '))}</div></div>` : ''}
         <div><small class="muted">Motivo</small><div>${esc(MOTIVOS[t.motivo])}</div></div>
+        <div><small class="muted">Origen</small><div>${esc(t.origen || '—')}</div></div>
         <div><small class="muted">Folio</small><div>${esc(t.folio)}</div></div>
         <div><small class="muted">Fecha de recepción</small><div>${fmtDate(t.fecha_recepcion)}</div></div>
         <div><small class="muted">Creado</small><div>${fmtDateTime(t.created_at)}</div></div>

@@ -70,6 +70,11 @@
       <div id="tabNuevo" class="tabpane">
         <form id="formTicket" class="card">
           <h2>Nuevo reclamo <span id="farmName" class="muted small"></span></h2>
+          <fieldset class="origen">
+            <legend>Origen del pedido <span class="req">*</span></legend>
+            <label><input type="radio" name="tOrigen" value="CEDI" required><span>CEDI</span></label>
+            <label><input type="radio" name="tOrigen" value="AMERICANA"><span>AMERICANA</span></label>
+          </fieldset>
           <div class="grid3">
             <label>Tipo de reclamo
               <select id="tMotivo" required>
@@ -128,6 +133,7 @@
             <select id="fEstatus"><option value="">Todos los estatus</option></select>
             <select id="fMotivo"><option value="">Todos los motivos</option></select>
             <select id="fZona"><option value="">Todas las zonas</option></select>
+            <select id="fOrigen"><option value="">Todos los orígenes</option><option>CEDI</option><option>AMERICANA</option></select>
             <input id="fBuscar" placeholder="Buscar folio, sucursal, código o correo">
             <button class="btn ghost sm" id="btnRefreshStaff">Actualizar</button>
             <button class="btn ghost sm" id="btnExport">Exportar Excel</button>
