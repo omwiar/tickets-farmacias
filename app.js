@@ -77,7 +77,7 @@
     msg($('#loginMsg'), 'Enviando…');
     const timeout = new Promise((r) => setTimeout(() => r({ error: { message: 'timeout' } }), 30000));
     const { error } = await Promise.race([
-      sb.auth.signInWithOtp({ email: pendingEmail, options: { shouldCreateUser: true } }),
+      sb.auth.signInWithOtp({ email: pendingEmail, options: { shouldCreateUser: true, emailRedirectTo: location.origin + location.pathname } }),
       timeout,
     ]);
     btn.disabled = false;
