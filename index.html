@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reclamos de Pedidos</title>
+  <meta name="description" content="Portal de tickets para que las farmacias reporten diferencias en pedidos.">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230f766e'/><path d='M42 22h16v20h20v16H58v20H42V58H22V42h20z' fill='white'/></svg>">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo">+</span> Reclamos de Pedidos</div>
+    <div id="userbox" class="userbox hidden">
+      <span id="userEmail"></span>
+      <span id="userRole" class="pill"></span>
+      <button id="btnLogout" class="btn ghost sm">Salir</button>
+    </div>
+  </header>
+
+  <main id="app">
+    <!-- LOGIN -->
+    <section id="viewLogin" class="view hidden">
+      <div class="card narrow">
+        <h1>Ingresar</h1>
+        <p class="muted">Te enviaremos un código de acceso a tu correo.</p>
+        <form id="formEmail">
+          <label>Correo electrónico
+            <input type="email" id="loginEmail" required autocomplete="email" placeholder="farmacia@correo.com">
+          </label>
+          <button class="btn primary block" type="submit">Enviar código</button>
+        </form>
+        <form id="formCode" class="hidden">
+          <p>Código enviado a <b id="sentTo"></b></p>
+          <label>Código de acceso
+            <input type="text" id="loginCode" inputmode="numeric" autocomplete="one-time-code" maxlength="10" required placeholder="123456" class="code-input">
+          </label>
+          <button class="btn primary block" type="submit">Entrar</button>
+          <button class="btn ghost block" type="button" id="btnBackEmail">Usar otro correo</button>
+        </form>
+        <p id="loginMsg" class="msg"></p>
+      </div>
+    </section>
+
+    <!-- PERFIL FARMACIA -->
+    <section id="viewProfile" class="view hidden">
+      <div class="card narrow">
+        <h1>Datos de tu farmacia</h1>
+        <p class="muted">Solo la primera vez.</p>
+        <form id="formProfile">
+          <label>Nombre de la farmacia
+            <input id="profNombre" required placeholder="Farmacia Centro">
+          </label>
+          <label>Código de sucursal (opcional)
+            <input id="profSucursal" placeholder="S-001">
+          </label>
+          <button class="btn primary block" type="submit">Guardar</button>
+        </form>
+        <p id="profileMsg" class="msg"></p>
+      </div>
+    </section>
+
+    <!-- FARMACIA -->
+    <section id="viewFarmacia" class="view hidden">
+      <nav class="tabs">
+        <button class="tab active" data-tab="tabNuevo">Nuevo ticket</button>
+        <button class="tab" data-tab="tabMisTickets">Mis tickets</button>
+      </nav>
+
+      <div id="tabNuevo" class="tabpane">
+        <form id="formTicket" class="card">
+          <h2>Nuevo reclamo <span id="farmName" class="muted small"></span></h2>
+          <div class="grid3">
+            <label>Tipo de reclamo
+              <select id="tMotivo" required>
+                <option value="">Selecciona…</option>
+              </select>
+            </label>
+            <label>Número de folio
+              <input id="tFolio" required placeholder="Folio del pedido">
+            </label>
+            <label>Fecha de recepción
+              <input id="tFecha" type="date" required>
+            </label>
+          </div>
+
+          <h3>Productos</h3>
+          <div class="items-head">
+            <span>Código</span><span>Descripción</span><span>Cantidad</span><span></span>
+          </div>
+          <div id="itemsList"></div>
+          <button type="button" id="btnAddItem" class="btn ghost">+ Agregar producto</button>
+
+          <label>Observaciones (opcional)
+            <textarea id="tObs" rows="3" placeholder="Detalles adicionales"></textarea>
+          </label>
+          <div class="actions">
+            <button class="btn primary" type="submit" id="btnSubmitTicket">Enviar ticket</button>
+          </div>
+          <p id="ticketMsg" class="msg"></p>
+        </form>
+      </div>
+
+      <div id="tabMisTickets" class="tabpane hidden">
+        <div class="card">
+          <div class="row-between">
+            <h2>Mis tickets</h2>
+            <button class="btn ghost sm" id="btnRefreshMine">Actualizar</button>
+          </div>
+          <div id="myTickets" class="table-wrap"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ATENCIÓN -->
+    <section id="viewStaff" class="view hidden">
+      <nav class="tabs">
+        <button class="tab active" data-tab="tabTickets">Tickets</button>
+        <button class="tab" data-tab="tabCatalogo">Catálogo</button>
+        <button class="tab admin-only" data-tab="tabUsuarios">Usuarios de atención</button>
+      </nav>
+
+      <div id="tabTickets" class="tabpane">
+        <div class="stats" id="stats"></div>
+        <div class="card">
+          <div class="filters">
+            <select id="fEstatus"><option value="">Todos los estatus</option></select>
+            <select id="fMotivo"><option value="">Todos los motivos</option></select>
+            <input id="fBuscar" placeholder="Buscar folio, farmacia o correo">
+            <button class="btn ghost sm" id="btnRefreshStaff">Actualizar</button>
+            <button class="btn ghost sm" id="btnExport">Exportar Excel</button>
+          </div>
+          <div id="staffTickets" class="table-wrap"></div>
+        </div>
+      </div>
+
+      <div id="tabCatalogo" class="tabpane hidden">
+        <div class="card">
+          <h2>Importar catálogo</h2>
+          <p class="muted">Sube un archivo Excel (.xlsx) o CSV con columnas <b>codigo</b> y <b>descripcion</b>. Si el código ya existe, se actualiza la descripción.</p>
+          <div class="row">
+            <input type="file" id="fileCatalog" accept=".csv,.xlsx,.xls">
+            <button class="btn primary" id="btnImport">Importar</button>
+          </div>
+          <p id="importMsg" class="msg"></p>
+        </div>
+        <div class="card">
+          <h2>Agregar / editar producto</h2>
+          <form id="formProd" class="row">
+            <input id="pCodigo" placeholder="Código" required>
+            <input id="pDesc" placeholder="Descripción" required class="grow">
+            <button class="btn primary" type="submit">Guardar</button>
+          </form>
+          <p id="prodMsg" class="msg"></p>
+        </div>
+        <div class="card">
+          <div class="row-between">
+            <h2>Productos <span id="prodCount" class="muted small"></span></h2>
+            <input id="prodSearch" placeholder="Buscar código o descripción">
+          </div>
+          <div id="prodList" class="table-wrap"></div>
+        </div>
+      </div>
+
+      <div id="tabUsuarios" class="tabpane hidden">
+        <div class="card">
+          <h2>Usuarios de atención</h2>
+          <p class="muted">Estos correos ven todos los tickets y pueden cambiar el estatus. Cualquier otro correo entra como farmacia.</p>
+          <form id="formStaff" class="row">
+            <input id="sEmail" type="email" placeholder="correo@empresa.com" required>
+            <input id="sNombre" placeholder="Nombre">
+            <label class="check"><input type="checkbox" id="sAdmin"> Admin</label>
+            <button class="btn primary" type="submit">Agregar</button>
+          </form>
+          <p id="staffMsg" class="msg"></p>
+          <div id="staffList" class="table-wrap"></div>
+        </div>
+      </div>
+    </section>
+
+    <div id="loading" class="loading">Cargando…</div>
+  </main>
+
+  <!-- MODAL DETALLE -->
+  <dialog id="dlg">
+    <div class="dlg-head">
+      <h2 id="dlgTitle"></h2>
+      <button class="btn ghost sm" id="dlgClose" aria-label="Cerrar">✕</button>
+    </div>
+    <div id="dlgBody"></div>
+  </dialog>
+
+  <template id="tplItem">
+    <div class="item-row">
+      <input class="i-codigo" placeholder="Código" required>
+      <div class="i-desc-wrap">
+        <input class="i-desc" placeholder="Se llena automáticamente" readonly tabindex="-1">
+        <small class="i-hint"></small>
+      </div>
+      <input class="i-cant" type="number" min="0.01" step="any" placeholder="0" required>
+      <button type="button" class="btn ghost sm i-del" aria-label="Quitar">✕</button>
+    </div>
+  </template>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
