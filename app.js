@@ -75,7 +75,11 @@
     const btn = e.submitter; btn.disabled = true;
     pendingEmail = $('#loginEmail').value.trim().toLowerCase();
     msg($('#loginMsg'), 'Enviando…');
-    const { error } = await sb.auth.signInWithOtp({ email: pendingEmail, options: { shouldCreateUser: true } });
+    const timeout = new Promise((r) => setTimeout(() => r({ error: { message: 'timeout' } }), 30000));
+    const { error } = await Promise.race([
+      sb.auth.signInWithOtp({ email: pendingEmail, options: { shouldCreateUser: true } }),
+      timeout,
+    ]);
     btn.disabled = false;
     if (error) return msg($('#loginMsg'), traducirError(error), 'err');
     $('#sentTo').textContent = pendingEmail;
@@ -104,6 +108,8 @@
   function traducirError(error) {
     const m = error?.message || String(error);
     if (/rate limit|security purposes/i.test(m)) return 'Demasiados intentos. Espera un momento antes de pedir otro código.';
+    if (/timeout|504|sending|smtp|confirmation email|magic link email/i.test(m) || error?.status === 504)
+      return 'No se pudo enviar el correo con el código. Intenta de nuevo en unos minutos o avisa al administrador.';
     return m;
   }
 
