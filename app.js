@@ -33,7 +33,7 @@
     el.className = 'msg ' + type;
   }
 
-  const state = { user: null, staff: null, profile: null, staffTickets: [] };
+  const state = { user: null, staff: null, profile: null, staffTickets: [], preview: null };
 
   function show(viewId) {
     $$('.view').forEach((v) => v.classList.toggle('hidden', v.id !== viewId));
@@ -162,6 +162,7 @@
     if (staff) {
       $('#userRole').textContent = staff.es_admin ? 'Admin' : 'Atención';
       $$('.admin-only').forEach((el) => el.classList.toggle('hidden', !staff.es_admin));
+      state.preview = null; $('#previewBar').classList.add('hidden');
       show('viewStaff');
       loadZonas();
       return loadStaffTickets();
@@ -287,13 +288,15 @@
       p_fecha: $('#tFecha').value,
       p_observaciones: $('#tObs').value,
       p_items: items,
+      p_cod_suc: state.preview?.cod_suc ?? null,
     });
     btn.disabled = false;
     if (error) return msg($('#ticketMsg'), error.message, 'err');
     $('#formTicket').reset();
     $('#itemsList').innerHTML = '';
     addItem();
-    msg($('#ticketMsg'), `Ticket #${data} enviado. Puedes darle seguimiento en "Mis tickets".`, 'ok');
+    $$('input[name=tOrigen]').forEach((r) => (r.checked = false));
+    msg($('#ticketMsg'), `Ticket${state.preview ? ' de prueba' : ''} #${data} enviado. Puedes darle seguimiento en "Mis tickets".`, 'ok');
   });
 
   // ---------- Farmacia: mis tickets ----------
@@ -302,7 +305,9 @@
     box.innerHTML = '<p class="muted">Cargando…</p>';
     const { data, error } = await sb.from('tickets')
       .select('id, motivo, origen, folio, fecha_recepcion, estatus, nota_atencion, created_at, updated_at, ticket_items(count)')
-      .eq('user_id', state.user.id).order('created_at', { ascending: false }).limit(300);
+      .eq('user_id', state.user.id).eq('es_prueba', !!state.preview)
+      .match(state.preview ? { cod_suc: state.preview.cod_suc } : {})
+      .order('created_at', { ascending: false }).limit(300);
     if (error) return (box.innerHTML = `<p class="msg err">${esc(error.message)}</p>`);
     if (!data.length) return (box.innerHTML = '<p class="muted">Aún no has creado tickets.</p>');
     box.innerHTML = `<table><thead><tr>
@@ -326,10 +331,21 @@
     const box = $('#staffTickets');
     box.innerHTML = '<p class="muted">Cargando…</p>';
     let q = sb.from('tickets')
-      .select('id, email, farmacia, cod_suc, zona, ruta, motivo, origen, folio, fecha_recepcion, estatus, atendido_por, created_at, updated_at, ticket_items(count)')
+      .select('id, email, farmacia, cod_suc, zona, ruta, motivo, origen, es_prueba, folio, fecha_recepcion, estatus, atendido_por, created_at, updated_at, ticket_items(count)')
       .order('created_at', { ascending: false }).limit(1000);
     const fe = $('#fEstatus').value, fm = $('#fMotivo').value, fz = $('#fZona').value;
     if (fz) q = q.eq('zona', fz);
+    const fp = $('#fPrueba').value;
+    if (fp) q = q.eq('es_prueba', fp === 'si');
+    // Filtro por fecha (creación o recepción); los límites usan la zona horaria local
+    const campo = $('#fFechaCampo').value, desde = $('#fDesde').value, hasta = $('#fHasta').value;
+    if (campo === 'created_at') {
+      if (desde) q = q.gte('created_at', new Date(desde + 'T00:00:00').toISOString());
+      if (hasta) q = q.lt('created_at', new Date(new Date(hasta + 'T00:00:00').getTime() + 864e5).toISOString());
+    } else {
+      if (desde) q = q.gte('fecha_recepcion', desde);
+      if (hasta) q = q.lte('fecha_recepcion', hasta);
+    }
     const fo = $('#fOrigen').value;
     if (fo) q = q.eq('origen', fo);
     if (fe) q = q.eq('estatus', fe);
@@ -369,7 +385,7 @@
       <th>#</th><th>Creado</th><th>Farmacia</th><th>Motivo</th><th>Origen</th><th>Folio</th><th>Recibido</th><th>Prod.</th><th>Estatus</th><th>Atendió</th>
     </tr></thead><tbody>${data.map((t) => `
       <tr class="clickable" data-id="${t.id}">
-        <td>${t.id}</td><td>${fmtDate(t.created_at)}</td>
+        <td>${t.id}${t.es_prueba ? '<br><span class="badge-prueba">PRUEBA</span>' : ''}</td><td>${fmtDate(t.created_at)}</td>
         <td><div>${esc(t.farmacia)} ${t.cod_suc ? `<small class="muted">${esc(t.cod_suc)}</small>` : ''}</div><small class="muted">${esc([t.zona, t.ruta].filter(Boolean).join(' · ') || t.email)}</small></td>
         <td>${esc(MOTIVOS[t.motivo])}</td><td>${t.origen ? `<span class="pill-origen">${esc(t.origen)}</span>` : ''}</td><td>${esc(t.folio)}</td><td>${fmtDate(t.fecha_recepcion)}</td>
         <td>${t.ticket_items?.[0]?.count ?? ''}</td><td>${badge(t.estatus)}</td>
@@ -380,6 +396,23 @@
   $('#fMotivo').addEventListener('change', loadStaffTickets);
   $('#fZona').addEventListener('change', loadStaffTickets);
   $('#fOrigen').addEventListener('change', loadStaffTickets);
+  $('#fPrueba').addEventListener('change', loadStaffTickets);
+  ['#fFechaCampo', '#fDesde', '#fHasta'].forEach((id) => $(id).addEventListener('change', () => {
+    $$('.filters.fechas .quick .btn').forEach((b) => b.classList.remove('on'));
+    loadStaffTickets();
+  }));
+  $('.filters.fechas .quick').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-rango]');
+    if (!b) return;
+    const r = b.dataset.rango, hoy = today();
+    let desde = '', hasta = '';
+    if (r === 'hoy') { desde = hasta = hoy; }
+    else if (r === 'mes') { desde = hoy.slice(0, 8) + '01'; hasta = hoy; }
+    else if (r) { const d = new Date(hoy + 'T00:00:00'); d.setDate(d.getDate() - (Number(r) - 1)); desde = d.toLocaleDateString('en-CA'); hasta = hoy; }
+    $('#fDesde').value = desde; $('#fHasta').value = hasta;
+    $$('.filters.fechas .quick .btn').forEach((x) => x.classList.toggle('on', x === b && !!r));
+    loadStaffTickets();
+  });
   async function loadZonas() {
     const { data } = await sb.from('sucursales').select('zona');
     const zonas = [...new Set((data || []).map((x) => x.zona).filter(Boolean))].sort();
@@ -399,15 +432,15 @@
     const rows = [];
     for (let i = 0; i < ids.length; i += 200) {
       const { data, error } = await sb.from('tickets')
-        .select('id, created_at, farmacia, cod_suc, zona, ruta, email, motivo, origen, folio, fecha_recepcion, estatus, nota_atencion, atendido_por, ticket_items(codigo, descripcion, laboratorio, factor, cantidad)')
+        .select('id, created_at, farmacia, cod_suc, zona, ruta, email, motivo, origen, es_prueba, folio, fecha_recepcion, estatus, nota_atencion, atendido_por, ticket_items(codigo, descripcion, laboratorio, factor, cantidad)')
         .in('id', ids.slice(i, i + 200)).order('id');
       if (error) return alert(error.message);
       for (const t of data) for (const it of t.ticket_items) {
-        rows.push([t.id, t.created_at.slice(0, 10), t.cod_suc || '', t.farmacia, t.zona || '', t.ruta || '', t.email, MOTIVOS[t.motivo], t.origen || '', t.folio, t.fecha_recepcion,
+        rows.push([t.id, t.es_prueba ? 'Sí' : 'No', t.created_at.slice(0, 10), t.cod_suc || '', t.farmacia, t.zona || '', t.ruta || '', t.email, MOTIVOS[t.motivo], t.origen || '', t.folio, t.fecha_recepcion,
           it.codigo, it.descripcion, it.laboratorio || '', it.factor ?? '', it.cantidad, ESTATUS[t.estatus], t.nota_atencion || '', t.atendido_por || '']);
       }
     }
-    const head = ['Ticket', 'Creado', 'Cód. sucursal', 'Sucursal', 'Zona', 'Ruta', 'Correo', 'Motivo', 'Origen', 'Folio', 'Fecha recepción', 'Código', 'Descripción', 'Laboratorio', 'Factor', 'Cantidad', 'Estatus', 'Nota atención', 'Atendió'];
+    const head = ['Ticket', 'Prueba', 'Creado', 'Cód. sucursal', 'Sucursal', 'Zona', 'Ruta', 'Correo', 'Motivo', 'Origen', 'Folio', 'Fecha recepción', 'Código', 'Descripción', 'Laboratorio', 'Factor', 'Cantidad', 'Estatus', 'Nota atención', 'Atendió'];
     const ws = XLSX.utils.aoa_to_sheet([head, ...rows]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Tickets');
@@ -451,6 +484,7 @@
           <button class="btn primary" type="submit">Guardar cambios</button>
           <p id="statusMsg" class="msg"></p>
         </form>` : (t.nota_atencion ? `<div class="note"><small class="muted">Respuesta de atención</small><br>${esc(t.nota_atencion)}</div>` : '')}
+      ${isStaff && t.es_prueba && state.staff?.es_admin ? `<p><button class="btn ghost sm danger" id="btnDelPrueba">Borrar este ticket de prueba</button></p>` : ''}
       <h3>Historial</h3>
       <ul class="timeline">${(hist || []).map((h) => `
         <li><span class="when">${fmtDateTime(h.created_at)}</span>
@@ -458,6 +492,14 @@
           ${h.nota ? `<div>${esc(h.nota)}</div>` : ''}
           <small class="muted">${esc(h.usuario || '')}</small></li>`).join('')}</ul>`;
 
+    if (t.es_prueba) $('#dlgTitle').innerHTML = `Ticket #${id} <span class="badge-prueba">PRUEBA</span>`;
+    $('#btnDelPrueba')?.addEventListener('click', async () => {
+      if (!confirm(`¿Borrar el ticket de prueba #${id}?`)) return;
+      const { error } = await sb.from('tickets').delete().eq('id', id).eq('es_prueba', true);
+      if (error) return alert(error.message);
+      $('#dlg').close();
+      loadStaffTickets();
+    });
     if (isStaff) {
       $('#formStatus').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -550,6 +592,41 @@
     } catch (err) {
       msg(out, 'No se pudo leer el archivo: ' + err.message, 'err');
     }
+  });
+
+  // ---------- Admin: probar como farmacia ----------
+  $('#btnPreview').addEventListener('click', async () => {
+    const { data: sucs } = await sb.from('sucursales').select('cod_suc, sucursal').eq('activo', true).order('sucursal');
+    $('#dlgTitle').textContent = 'Probar como farmacia';
+    $('#dlgBody').innerHTML = `
+      <p class="muted">Verás la app igual que una sucursal. Los tickets que crees quedan marcados como <span class="badge-prueba">PRUEBA</span>, aparecen en el panel y los puedes borrar.</p>
+      <form id="formPreview">
+        <label>Sucursal
+          <select id="pvSuc" required><option value="">Selecciona…</option>
+            ${(sucs || []).map((x) => `<option value="${esc(x.cod_suc)}">${esc(x.sucursal)} (${esc(x.cod_suc)})</option>`).join('')}
+          </select>
+        </label>
+        <button class="btn primary" type="submit">Entrar como esta sucursal</button>
+      </form>`;
+    if (!$('#dlg').open) $('#dlg').showModal();
+    $('#formPreview').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const opt = $('#pvSuc').selectedOptions[0];
+      state.preview = { cod_suc: opt.value, nombre: opt.textContent.replace(/ \([^)]*\)$/, '') };
+      state.profile = { nombre: state.preview.nombre, codigo_sucursal: state.preview.cod_suc };
+      $('#dlg').close();
+      $('#previewName').textContent = `${state.preview.nombre} (${state.preview.cod_suc})`;
+      $('#previewBar').classList.remove('hidden');
+      $('#formTicket').reset(); $('#itemsList').innerHTML = ''; msg($('#ticketMsg'), '');
+      $('#viewFarmacia .tab[data-tab=tabNuevo]').click();
+      enterFarmacia();
+    });
+  });
+  $('#btnExitPreview').addEventListener('click', () => {
+    state.preview = null; state.profile = null;
+    $('#previewBar').classList.add('hidden');
+    show('viewStaff');
+    loadStaffTickets();
   });
 
   // ---------- Sucursales (maestro) ----------
