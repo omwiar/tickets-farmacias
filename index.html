@@ -137,7 +137,7 @@
       <div id="tabCatalogo" class="tabpane hidden">
         <div class="card">
           <h2>Importar catálogo</h2>
-          <p class="muted">Sube un archivo Excel (.xlsx) o CSV con columnas <b>codigo</b> y <b>descripcion</b>. Si el código ya existe, se actualiza la descripción.</p>
+          <p class="muted">Sube un archivo Excel (.xlsx) o CSV con columnas <b>codigo</b>, <b>descripcion</b> (o <b>articulo</b>), y opcionalmente <b>laboratorio</b> y <b>factor</b>. Si el código ya existe, se actualiza la descripción.</p>
           <div class="row">
             <input type="file" id="fileCatalog" accept=".csv,.xlsx,.xls">
             <button class="btn primary" id="btnImport">Importar</button>
@@ -149,6 +149,8 @@
           <form id="formProd" class="row">
             <input id="pCodigo" placeholder="Código" required>
             <input id="pDesc" placeholder="Descripción" required class="grow">
+            <input id="pLab" placeholder="Laboratorio">
+            <input id="pFactor" type="number" step="any" min="0" placeholder="Factor">
             <button class="btn primary" type="submit">Guardar</button>
           </form>
           <p id="prodMsg" class="msg"></p>

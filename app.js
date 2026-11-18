@@ -176,8 +176,10 @@
   const productCache = new Map();
   async function lookupProduct(code) {
     if (productCache.has(code)) return productCache.get(code);
-    const { data } = await sb.from('productos').select('descripcion').eq('codigo', code).maybeSingle();
-    const d = data?.descripcion || null;
+    const codes = [code];
+    if (/^\d{1,7}$/.test(code)) codes.push(code.padStart(8, '0')); // permite escribir sin ceros
+    const { data } = await sb.from('productos').select('codigo, descripcion, laboratorio, factor').in('codigo', codes);
+    const d = (data || []).sort((a, b) => (a.codigo === code ? -1 : 1))[0] || null;
     productCache.set(code, d);
     return d;
   }
@@ -195,8 +197,9 @@
       const d = await lookupProduct(code);
       if (my !== seq) return;
       if (d) {
-        desc.value = d; desc.readOnly = true; desc.dataset.found = '1';
-        hint.textContent = '';
+        if (d.codigo !== code) cod.value = d.codigo;
+        desc.value = d.descripcion; desc.readOnly = true; desc.dataset.found = '1';
+        hint.textContent = [d.laboratorio, d.factor != null ? `Factor ${d.factor}` : ''].filter(Boolean).join(' · ');
       } else {
         desc.value = ''; desc.readOnly = false; desc.required = true;
         desc.placeholder = 'No está en catálogo: escribe la descripción';
@@ -340,15 +343,15 @@
     const rows = [];
     for (let i = 0; i < ids.length; i += 200) {
       const { data, error } = await sb.from('tickets')
-        .select('id, created_at, farmacia, email, motivo, folio, fecha_recepcion, estatus, nota_atencion, atendido_por, ticket_items(codigo, descripcion, cantidad)')
+        .select('id, created_at, farmacia, email, motivo, folio, fecha_recepcion, estatus, nota_atencion, atendido_por, ticket_items(codigo, descripcion, laboratorio, factor, cantidad)')
         .in('id', ids.slice(i, i + 200)).order('id');
       if (error) return alert(error.message);
       for (const t of data) for (const it of t.ticket_items) {
         rows.push([t.id, t.created_at.slice(0, 10), t.farmacia, t.email, MOTIVOS[t.motivo], t.folio, t.fecha_recepcion,
-          it.codigo, it.descripcion, it.cantidad, ESTATUS[t.estatus], t.nota_atencion || '', t.atendido_por || '']);
+          it.codigo, it.descripcion, it.laboratorio || '', it.factor ?? '', it.cantidad, ESTATUS[t.estatus], t.nota_atencion || '', t.atendido_por || '']);
       }
     }
-    const head = ['Ticket', 'Creado', 'Farmacia', 'Correo', 'Motivo', 'Folio', 'Fecha recepción', 'Código', 'Descripción', 'Cantidad', 'Estatus', 'Nota atención', 'Atendió'];
+    const head = ['Ticket', 'Creado', 'Farmacia', 'Correo', 'Motivo', 'Folio', 'Fecha recepción', 'Código', 'Descripción', 'Laboratorio', 'Factor', 'Cantidad', 'Estatus', 'Nota atención', 'Atendió'];
     const ws = XLSX.utils.aoa_to_sheet([head, ...rows]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Tickets');
@@ -362,7 +365,7 @@
     $('#dlgBody').innerHTML = '<p class="muted">Cargando…</p>';
     if (!dlg.open) dlg.showModal();
     const [{ data: t, error }, { data: hist }] = await Promise.all([
-      sb.from('tickets').select('*, ticket_items(codigo, descripcion, cantidad)').eq('id', id).single(),
+      sb.from('tickets').select('*, ticket_items(codigo, descripcion, laboratorio, factor, cantidad)').eq('id', id).single(),
       sb.from('ticket_historial').select('*').eq('ticket_id', id).order('created_at'),
     ]);
     if (error) return ($('#dlgBody').innerHTML = `<p class="msg err">${esc(error.message)}</p>`);
@@ -377,8 +380,8 @@
         <div><small class="muted">Estatus</small><div>${badge(t.estatus)}</div></div>
       </div>
       ${t.observaciones ? `<p><small class="muted">Observaciones</small><br>${esc(t.observaciones)}</p>` : ''}
-      <table class="compact"><thead><tr><th>Código</th><th>Descripción</th><th class="num">Cantidad</th></tr></thead>
-      <tbody>${t.ticket_items.map((i) => `<tr><td>${esc(i.codigo)}</td><td>${esc(i.descripcion)}</td><td class="num">${esc(i.cantidad)}</td></tr>`).join('')}</tbody></table>
+      <table class="compact"><thead><tr><th>Código</th><th>Descripción</th><th>Laboratorio</th><th class="num">Factor</th><th class="num">Cantidad</th></tr></thead>
+      <tbody>${t.ticket_items.map((i) => `<tr><td>${esc(i.codigo)}</td><td>${esc(i.descripcion)}</td><td>${esc(i.laboratorio || '')}</td><td class="num">${esc(i.factor ?? '')}</td><td class="num">${esc(i.cantidad)}</td></tr>`).join('')}</tbody></table>
       ${isStaff ? `
         <form id="formStatus" class="status-form">
           <h3>Actualizar</h3>
@@ -416,22 +419,22 @@
   let prodTimer;
   async function loadProducts() {
     const s = $('#prodSearch').value.trim();
-    let q = sb.from('productos').select('codigo, descripcion', { count: 'exact' }).order('codigo').limit(200);
-    if (s) q = q.or(`codigo.ilike.%${s.replace(/[%,()]/g, '')}%,descripcion.ilike.%${s.replace(/[%,()]/g, '')}%`);
+    let q = sb.from('productos').select('codigo, descripcion, laboratorio, factor', { count: 'exact' }).order('codigo').limit(200);
+    if (s) { const t = s.replace(/[%,()]/g, ''); q = q.or(`codigo.ilike.%${t}%,descripcion.ilike.%${t}%,laboratorio.ilike.%${t}%`); }
     const { data, count, error } = await q;
     const box = $('#prodList');
     if (error) return (box.innerHTML = `<p class="msg err">${esc(error.message)}</p>`);
     $('#prodCount').textContent = `(${count ?? 0}${count > 200 ? ', mostrando 200' : ''})`;
-    box.innerHTML = data.length ? `<table class="compact"><thead><tr><th>Código</th><th>Descripción</th><th></th></tr></thead><tbody>
-      ${data.map((p) => `<tr><td>${esc(p.codigo)}</td><td>${esc(p.descripcion)}</td>
-        <td class="num"><button class="btn ghost sm" data-edit="${esc(p.codigo)}" data-desc="${esc(p.descripcion)}">Editar</button>
+    box.innerHTML = data.length ? `<table class="compact"><thead><tr><th>Código</th><th>Descripción</th><th>Laboratorio</th><th class="num">Factor</th><th></th></tr></thead><tbody>
+      ${data.map((p) => `<tr><td>${esc(p.codigo)}</td><td>${esc(p.descripcion)}</td><td>${esc(p.laboratorio || '')}</td><td class="num">${esc(p.factor ?? '')}</td>
+        <td class="num"><button class="btn ghost sm" data-edit="${esc(p.codigo)}" data-desc="${esc(p.descripcion)}" data-lab="${esc(p.laboratorio || '')}" data-factor="${esc(p.factor ?? '')}">Editar</button>
         <button class="btn ghost sm danger" data-del="${esc(p.codigo)}">Borrar</button></td></tr>`).join('')}
       </tbody></table>` : '<p class="muted">Sin productos.</p>';
   }
   $('#prodSearch').addEventListener('input', () => { clearTimeout(prodTimer); prodTimer = setTimeout(loadProducts, 300); });
   $('#prodList').addEventListener('click', async (e) => {
     const ed = e.target.closest('[data-edit]');
-    if (ed) { $('#pCodigo').value = ed.dataset.edit; $('#pDesc').value = ed.dataset.desc; $('#pDesc').focus(); return; }
+    if (ed) { $('#pCodigo').value = ed.dataset.edit; $('#pDesc').value = ed.dataset.desc; $('#pLab').value = ed.dataset.lab; $('#pFactor').value = ed.dataset.factor; $('#pDesc').focus(); return; }
     const del = e.target.closest('[data-del]');
     if (del && confirm(`¿Borrar el producto ${del.dataset.del}?`)) {
       const { error } = await sb.from('productos').delete().eq('codigo', del.dataset.del);
@@ -441,7 +444,8 @@
   });
   $('#formProd').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const row = { codigo: $('#pCodigo').value.trim(), descripcion: $('#pDesc').value.trim(), updated_at: new Date().toISOString() };
+    const row = { codigo: $('#pCodigo').value.trim(), descripcion: $('#pDesc').value.trim(),
+      laboratorio: $('#pLab').value.trim() || null, factor: $('#pFactor').value === '' ? null : Number($('#pFactor').value), updated_at: new Date().toISOString() };
     const { error } = await sb.from('productos').upsert(row);
     if (error) return msg($('#prodMsg'), error.message, 'err');
     msg($('#prodMsg'), `Producto ${row.codigo} guardado.`, 'ok');
@@ -460,14 +464,20 @@
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', raw: false });
       if (!rows.length) return msg(out, 'El archivo está vacío.', 'err');
       const head = rows[0].map(norm);
-      let ci = head.findIndex((h) => ['codigo', 'cod', 'code', 'sku', 'itemcode', 'articulo'].includes(h));
-      let di = head.findIndex((h) => ['descripcion', 'desc', 'description', 'nombre', 'itemname', 'producto'].includes(h));
+      let ci = head.findIndex((h) => ['codigo', 'cod', 'code', 'sku', 'itemcode'].includes(h));
+      let di = head.findIndex((h) => ['descripcion', 'desc', 'description', 'nombre', 'itemname', 'producto', 'articulo'].includes(h));
+      const li = head.findIndex((h) => ['laboratorio', 'lab', 'proveedor', 'fabricante'].includes(h));
+      const fi = head.findIndex((h) => ['factor', 'fact', 'unidades', 'empaque'].includes(h));
       let start = 1;
       if (ci < 0 || di < 0) { ci = 0; di = 1; start = 0; }
       const map = new Map();
       for (const r of rows.slice(start)) {
         const c = String(r[ci] ?? '').trim(), d = String(r[di] ?? '').trim();
-        if (c && d) map.set(c, { codigo: c, descripcion: d, updated_at: new Date().toISOString() });
+        if (!c || !d) continue;
+        const row = { codigo: c, descripcion: d, updated_at: new Date().toISOString() };
+        if (li >= 0) row.laboratorio = String(r[li] ?? '').trim() || null;
+        if (fi >= 0) { const f = Number(String(r[fi] ?? '').replace(',', '.')); row.factor = String(r[fi] ?? '').trim() !== '' && Number.isFinite(f) ? f : null; }
+        map.set(c, row);
       }
       const list = [...map.values()];
       if (!list.length) return msg(out, 'No se encontraron filas con código y descripción.', 'err');

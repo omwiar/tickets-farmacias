@@ -42,7 +42,7 @@ Panel: https://supabase.com/dashboard/project/lcbyyvlqnnjmvhvfefij
 
 ## Catálogo de productos
 
-En la pestaña **Catálogo** (usuarios de atención) sube un `.xlsx` o `.csv` con columnas `codigo` y `descripcion` (también reconoce `ItemCode`/`ItemName` de SAP). Si el código ya existe, se actualiza. Se cargaron 5 productos de ejemplo (`7501001`–`7501005`) que puedes borrar.
+En la pestaña **Catálogo** (usuarios de atención) sube un `.xlsx` o `.csv` con columnas `codigo`, `descripcion` (o `articulo`), `laboratorio` y `factor` (también reconoce `ItemCode`/`ItemName` de SAP). Si el código ya existe, se actualiza. Si la farmacia escribe el código sin ceros a la izquierda (ej. `162265`), se busca también como `00162265`.
 
 ## Estructura de datos
 
