@@ -61,3 +61,15 @@ Los tickets se crean con la función `crear_ticket()` (todo o nada). Las farmaci
 
 Solo pueden entrar correos `@farmaciasuno.com.sv` y los correos dados de alta en **Usuarios de atención**.
 Se aplica en la base de datos (triggers `trg_bloquear_dominio_*` sobre `auth.users` y `auth.one_time_tokens`), así que a un correo no autorizado no se le crea cuenta ni se le envía código. La regla está en la función `public.correo_permitido()`.
+
+## Maestro de sucursales
+
+Tabla `sucursales` (código, nombre, zona, ruta, teléfono, correo, transporte, correlativo de despacho, dirección, activa).
+
+- Si el correo con que entra una sucursal está en el maestro, queda vinculada **automáticamente** (función `vincular_sucursal()`); si no, elige su sucursal de una lista la primera vez.
+- Cada ticket guarda código de sucursal, zona y ruta. Atención puede filtrar por zona y los ve en el Excel exportado.
+- Pestaña **Sucursales**: atención la consulta; el **admin** la edita, agrega, desactiva o importa desde Excel (mismo formato que `Listado_de_Farmacias.xlsx`).
+
+## Sesión
+
+La sesión queda guardada en el navegador y **vence 12 horas** después de ingresar el código; luego se pide uno nuevo. (Se controla en `app.js`, `SESSION_MAX_MS`.)

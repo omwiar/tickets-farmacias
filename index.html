@@ -45,14 +45,14 @@
     <!-- PERFIL FARMACIA -->
     <section id="viewProfile" class="view hidden">
       <div class="card narrow">
-        <h1>Datos de tu farmacia</h1>
-        <p class="muted">Solo la primera vez.</p>
+        <h1>¿De qué sucursal eres?</h1>
+        <p class="muted">Tu correo no está en el maestro de sucursales. Selecciónala una sola vez.</p>
         <form id="formProfile">
-          <label>Nombre de la farmacia
-            <input id="profNombre" required placeholder="Farmacia Centro">
+          <label>Sucursal
+            <select id="profSuc" required><option value="">Selecciona…</option></select>
           </label>
-          <label>Código de sucursal (opcional)
-            <input id="profSucursal" placeholder="S-001">
+          <label id="profOtraWrap" class="hidden">Nombre (si no aparece en la lista)
+            <input id="profNombre" placeholder="Ej.: CEDI">
           </label>
           <button class="btn primary block" type="submit">Guardar</button>
         </form>
@@ -117,6 +117,7 @@
       <nav class="tabs">
         <button class="tab active" data-tab="tabTickets">Tickets</button>
         <button class="tab" data-tab="tabCatalogo">Catálogo</button>
+        <button class="tab" data-tab="tabSucursales">Sucursales</button>
         <button class="tab admin-only" data-tab="tabUsuarios">Usuarios de atención</button>
       </nav>
 
@@ -126,7 +127,8 @@
           <div class="filters">
             <select id="fEstatus"><option value="">Todos los estatus</option></select>
             <select id="fMotivo"><option value="">Todos los motivos</option></select>
-            <input id="fBuscar" placeholder="Buscar folio, farmacia o correo">
+            <select id="fZona"><option value="">Todas las zonas</option></select>
+            <input id="fBuscar" placeholder="Buscar folio, sucursal, código o correo">
             <button class="btn ghost sm" id="btnRefreshStaff">Actualizar</button>
             <button class="btn ghost sm" id="btnExport">Exportar Excel</button>
           </div>
@@ -164,10 +166,50 @@
         </div>
       </div>
 
+      <div id="tabSucursales" class="tabpane hidden">
+        <div class="card admin-only">
+          <h2>Importar maestro de sucursales</h2>
+          <p class="muted">Excel con columnas <b>Cod_Suc</b>, <b>Sucursal</b>, RUTA (zona), Telefono, Correo, Direccion, Trans_Despacho, Corr. Despacho y RUTA (ruta). Si el código ya existe, se actualiza.</p>
+          <div class="row">
+            <input type="file" id="fileSuc" accept=".csv,.xlsx,.xls">
+            <button class="btn primary" id="btnImportSuc">Importar</button>
+          </div>
+          <p id="importSucMsg" class="msg"></p>
+        </div>
+        <div class="card admin-only">
+          <h2>Agregar / editar sucursal</h2>
+          <form id="formSuc" class="grid-suc">
+            <label>Código<input id="suCod" required placeholder="BODG-000"></label>
+            <label>Sucursal<input id="suNombre" required></label>
+            <label>Correo<input id="suCorreo" type="email" placeholder="sucursal@farmaciasuno.com.sv"></label>
+            <label>Teléfono<input id="suTel"></label>
+            <label>Zona<input id="suZona" list="dlZonas" placeholder="SAN SALVADOR"></label>
+            <label>Ruta<input id="suRuta" list="dlRutas" placeholder="1-Soya"></label>
+            <label>Transporte<input id="suTrans" list="dlTrans" placeholder="Americana"></label>
+            <label>Correlativo despacho<input id="suCorr" type="number" step="1"></label>
+            <label class="span2">Dirección<input id="suDir"></label>
+            <label class="check"><input type="checkbox" id="suActivo" checked> Activa</label>
+            <div class="actions span-all">
+              <button type="button" class="btn ghost" id="btnSucClear">Limpiar</button>
+              <button class="btn primary" type="submit">Guardar</button>
+            </div>
+          </form>
+          <datalist id="dlZonas"></datalist><datalist id="dlRutas"></datalist><datalist id="dlTrans"></datalist>
+          <p id="sucMsg" class="msg"></p>
+        </div>
+        <div class="card">
+          <div class="row-between">
+            <h2>Sucursales <span id="sucCount" class="muted small"></span></h2>
+            <input id="sucSearch" placeholder="Buscar código, nombre, zona o correo">
+          </div>
+          <div id="sucList" class="table-wrap"></div>
+        </div>
+      </div>
+
       <div id="tabUsuarios" class="tabpane hidden">
         <div class="card">
           <h2>Usuarios de atención</h2>
-          <p class="muted">Estos correos ven todos los tickets y pueden cambiar el estatus. Cualquier otro correo entra como farmacia.</p>
+          <p class="muted">Estos correos ven todos los tickets y pueden cambiar el estatus. Cualquier otro correo @farmaciasuno.com.sv entra como sucursal.</p>
           <form id="formStaff" class="row">
             <input id="sEmail" type="email" placeholder="correo@empresa.com" required>
             <input id="sNombre" placeholder="Nombre">

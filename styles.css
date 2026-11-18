@@ -107,6 +107,11 @@ label.check { display: flex; align-items: center; gap: .4rem; margin: 0; white-s
 }
 .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
 
+.grid-suc { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 1rem; align-items: end; }
+.grid-suc .span2 { grid-column: span 2; }
+.grid-suc .span-all { grid-column: 1 / -1; gap: .5rem; }
+.grid-suc label.check { margin-bottom: .85rem; }
+tr.inactiva td { opacity: .5; }
 .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 1rem; }
 .row { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
 .row input, .row select { margin-top: 0; width: auto; flex: 1 1 160px; }
@@ -175,6 +180,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .45); }
 @media (max-width: 720px) {
   main { padding: .75rem 16px; }
   .grid3, .detail-grid { grid-template-columns: 1fr; }
+  .grid-suc { grid-template-columns: 1fr 1fr; }
   .detail-grid { grid-template-columns: 1fr 1fr; }
   .items-head { display: none; }
   .item-row { grid-template-columns: 1fr 90px 40px; padding-bottom: .5rem; border-bottom: 1px dashed var(--border); }
