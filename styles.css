@@ -122,7 +122,7 @@ tr.inactiva td { opacity: .5; }
 .actions { display: flex; justify-content: flex-end; }
 
 .items-head, .item-row {
-  display: grid; grid-template-columns: 160px 1fr 110px 40px; gap: .5rem; align-items: start;
+  display: grid; grid-template-columns: 140px 1fr 190px 90px 40px; gap: .5rem; align-items: start;
 }
 .items-head { font-size: .8rem; font-weight: 600; color: var(--muted); padding: 0 0 .25rem; }
 .item-row { margin-bottom: .5rem; }
@@ -184,7 +184,12 @@ dialog::backdrop { background: rgba(0, 0, 0, .45); }
   .detail-grid { grid-template-columns: 1fr 1fr; }
   .items-head { display: none; }
   .item-row { grid-template-columns: 1fr 90px 40px; padding-bottom: .5rem; border-bottom: 1px dashed var(--border); }
+  .item-row .i-codigo { grid-column: 1; grid-row: 1; }
+  .item-row .i-cant { grid-column: 2; grid-row: 1; }
+  .item-row .i-del { grid-column: 3; grid-row: 1; }
   .item-row .i-desc-wrap { grid-column: 1 / -1; grid-row: 2; }
+  .item-row .i-motivo { grid-column: 1 / -1; grid-row: 3; }
+  .item-row .i-correcto-wrap { grid-row: 4; }
   .stats { gap: .5rem; }
   .stat .n { font-size: 1.4rem; }
   .card.narrow { margin: 1.5rem auto; }
@@ -217,3 +222,12 @@ fieldset.origen.invalid label span { border-color: var(--danger); }
 .filters.fechas label input { width: auto; margin: 0; }
 .filters.fechas .quick { display: flex; gap: .35rem; flex-wrap: wrap; }
 .filters.fechas .quick .btn.on { background: var(--primary-soft); color: var(--primary); border-color: var(--primary); }
+
+.grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 1rem; }
+.item-row select { margin-top: 0; }
+.item-row .i-correcto-wrap { grid-column: 1 / -1; margin: 0 0 .25rem; padding: .6rem .75rem; border-left: 3px solid var(--warn); background: var(--bg); border-radius: 0 8px 8px 0; }
+.item-row .i-correcto-hint { display: block; font-size: .78rem; font-weight: normal; color: var(--muted); margin-top: .25rem; }
+.motivos { display: flex; flex-wrap: wrap; gap: .25rem; }
+.motivo-tag { display: inline-block; font-size: .75rem; padding: .05rem .45rem; border-radius: 4px; background: var(--bg); border: 1px solid var(--border); white-space: nowrap; }
+.motivo-tag.cruces { border-color: var(--warn); color: var(--warn); }
+@media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }

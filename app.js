@@ -25,6 +25,8 @@
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmtDate = (d) => (d ? new Date(d.length === 10 ? d + 'T00:00:00' : d).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
   const fmtDateTime = (d) => (d ? new Date(d).toLocaleString('es', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
+  const motivosDe = (t) => (t.motivos?.length ? t.motivos : t.motivo ? [t.motivo] : []);
+  const motivosHtml = (t) => `<div class="motivos">${motivosDe(t).map((m) => `<span class="motivo-tag ${esc(m)}">${esc(MOTIVOS[m] || m)}</span>`).join('')}</div>`;
   const badge = (e) => `<span class="badge st-${esc(e)}">${esc(ESTATUS[e] || e)}</span>`;
   const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
 
@@ -62,7 +64,7 @@
 
   // ---------- Selects ----------
   for (const [k, v] of Object.entries(MOTIVOS)) {
-    $('#tMotivo').insertAdjacentHTML('beforeend', `<option value="${k}">${v}</option>`);
+    $('#tplItem').content.querySelector('.i-motivo').insertAdjacentHTML('beforeend', `<option value="${k}">${v}</option>`);
     $('#fMotivo').insertAdjacentHTML('beforeend', `<option value="${k}">${v}</option>`);
   }
   for (const [k, v] of Object.entries(ESTATUS)) {
@@ -255,6 +257,29 @@
     $('.i-cant', node).addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); addItem(); }
     });
+    // Tipo de reclamo por producto; "Cruces" habilita el campo opcional "Código correcto"
+    const mot = $('.i-motivo', node), corrWrap = $('.i-correcto-wrap', node), corr = $('.i-correcto', node), corrHint = $('.i-correcto-hint', node);
+    const prev = $('#itemsList .item-row:last-child .i-motivo');
+    if (prev?.value) mot.value = prev.value;
+    const toggleCorrecto = () => {
+      const on = mot.value === 'cruces';
+      corrWrap.classList.toggle('hidden', !on);
+      if (!on) { corr.value = ''; corrHint.textContent = ''; }
+    };
+    mot.addEventListener('change', () => { toggleCorrecto(); if (mot.value === 'cruces') corr.focus(); });
+    toggleCorrecto();
+    let ctimer;
+    corr.addEventListener('input', () => {
+      clearTimeout(ctimer);
+      corrHint.textContent = '';
+      const v = corr.value.trim();
+      if (!/^[A-Za-z]{0,2}\d{3,8}$/.test(v)) return; // solo busca si parece código
+      ctimer = setTimeout(async () => {
+        const d = await lookupProduct(v);
+        if (corr.value.trim() !== v) return;
+        if (d) { if (d.codigo !== v) corr.value = d.codigo; corrHint.textContent = '✓ ' + d.descripcion; }
+      }, 400);
+    });
     $('.i-del', node).addEventListener('click', () => {
       node.remove();
       if (!$('#itemsList').children.length) addItem();
@@ -271,9 +296,12 @@
       codigo: $('.i-codigo', r).value.trim(),
       descripcion: $('.i-desc', r).value.trim(),
       cantidad: Number($('.i-cant', r).value),
+      motivo: $('.i-motivo', r).value,
+      codigo_correcto: $('.i-motivo', r).value === 'cruces' ? ($('.i-correcto', r).value.trim() || null) : null,
     })).filter((i) => i.codigo);
     if (!items.length) return msg($('#ticketMsg'), 'Agrega al menos un producto.', 'err');
     if (items.some((i) => !i.descripcion)) return msg($('#ticketMsg'), 'Hay productos sin descripción.', 'err');
+    if (items.some((i) => !i.motivo)) return msg($('#ticketMsg'), 'Selecciona el tipo de reclamo de cada producto.', 'err');
     if (items.some((i) => !(i.cantidad > 0))) return msg($('#ticketMsg'), 'Las cantidades deben ser mayores a 0.', 'err');
 
     const origen = $('input[name=tOrigen]:checked')?.value;
@@ -282,7 +310,6 @@
     const btn = $('#btnSubmitTicket'); btn.disabled = true;
     msg($('#ticketMsg'), 'Enviando…');
     const { data, error } = await sb.rpc('crear_ticket', {
-      p_motivo: $('#tMotivo').value,
       p_origen: origen,
       p_folio: $('#tFolio').value,
       p_fecha: $('#tFecha').value,
@@ -304,7 +331,7 @@
     const box = $('#myTickets');
     box.innerHTML = '<p class="muted">Cargando…</p>';
     const { data, error } = await sb.from('tickets')
-      .select('id, motivo, origen, folio, fecha_recepcion, estatus, nota_atencion, created_at, updated_at, ticket_items(count)')
+      .select('id, motivo, motivos, origen, folio, fecha_recepcion, estatus, nota_atencion, created_at, updated_at, ticket_items(count)')
       .eq('user_id', state.user.id).eq('es_prueba', !!state.preview)
       .match(state.preview ? { cod_suc: state.preview.cod_suc } : {})
       .order('created_at', { ascending: false }).limit(300);
@@ -314,7 +341,7 @@
       <th>#</th><th>Creado</th><th>Motivo</th><th>Origen</th><th>Folio</th><th>Recibido</th><th>Productos</th><th>Estatus</th><th>Respuesta</th>
     </tr></thead><tbody>${data.map((t) => `
       <tr class="clickable" data-id="${t.id}">
-        <td>${t.id}</td><td>${fmtDate(t.created_at)}</td><td>${esc(MOTIVOS[t.motivo])}</td><td>${t.origen ? `<span class="pill-origen">${esc(t.origen)}</span>` : ''}</td>
+        <td>${t.id}</td><td>${fmtDate(t.created_at)}</td><td>${motivosHtml(t)}</td><td>${t.origen ? `<span class="pill-origen">${esc(t.origen)}</span>` : ''}</td>
         <td>${esc(t.folio)}</td><td>${fmtDate(t.fecha_recepcion)}</td>
         <td>${t.ticket_items?.[0]?.count ?? ''}</td><td>${badge(t.estatus)}</td>
         <td class="trunc">${esc(t.nota_atencion || '')}</td>
@@ -331,7 +358,7 @@
     const box = $('#staffTickets');
     box.innerHTML = '<p class="muted">Cargando…</p>';
     let q = sb.from('tickets')
-      .select('id, email, farmacia, cod_suc, zona, ruta, motivo, origen, es_prueba, folio, fecha_recepcion, estatus, atendido_por, created_at, updated_at, ticket_items(count)')
+      .select('id, email, farmacia, cod_suc, zona, ruta, motivo, motivos, origen, es_prueba, folio, fecha_recepcion, estatus, atendido_por, created_at, updated_at, ticket_items(count)')
       .order('created_at', { ascending: false }).limit(1000);
     const fe = $('#fEstatus').value, fm = $('#fMotivo').value, fz = $('#fZona').value;
     if (fz) q = q.eq('zona', fz);
@@ -349,7 +376,7 @@
     const fo = $('#fOrigen').value;
     if (fo) q = q.eq('origen', fo);
     if (fe) q = q.eq('estatus', fe);
-    if (fm) q = q.eq('motivo', fm);
+    if (fm) q = q.contains('motivos', [fm]);
     const { data, error } = await q;
     if (error) return (box.innerHTML = `<p class="msg err">${esc(error.message)}</p>`);
     state.staffTickets = data;
@@ -387,7 +414,7 @@
       <tr class="clickable" data-id="${t.id}">
         <td>${t.id}${t.es_prueba ? '<br><span class="badge-prueba">PRUEBA</span>' : ''}</td><td>${fmtDate(t.created_at)}</td>
         <td><div>${esc(t.farmacia)} ${t.cod_suc ? `<small class="muted">${esc(t.cod_suc)}</small>` : ''}</div><small class="muted">${esc([t.zona, t.ruta].filter(Boolean).join(' · ') || t.email)}</small></td>
-        <td>${esc(MOTIVOS[t.motivo])}</td><td>${t.origen ? `<span class="pill-origen">${esc(t.origen)}</span>` : ''}</td><td>${esc(t.folio)}</td><td>${fmtDate(t.fecha_recepcion)}</td>
+        <td>${motivosHtml(t)}</td><td>${t.origen ? `<span class="pill-origen">${esc(t.origen)}</span>` : ''}</td><td>${esc(t.folio)}</td><td>${fmtDate(t.fecha_recepcion)}</td>
         <td>${t.ticket_items?.[0]?.count ?? ''}</td><td>${badge(t.estatus)}</td>
         <td><small>${esc(t.atendido_por || '')}</small></td>
       </tr>`).join('')}</tbody></table>`;
@@ -432,15 +459,15 @@
     const rows = [];
     for (let i = 0; i < ids.length; i += 200) {
       const { data, error } = await sb.from('tickets')
-        .select('id, created_at, farmacia, cod_suc, zona, ruta, email, motivo, origen, es_prueba, folio, fecha_recepcion, estatus, nota_atencion, atendido_por, ticket_items(codigo, descripcion, laboratorio, factor, cantidad)')
+        .select('id, created_at, farmacia, cod_suc, zona, ruta, email, motivo, origen, es_prueba, folio, fecha_recepcion, estatus, nota_atencion, atendido_por, ticket_items(codigo, descripcion, laboratorio, factor, cantidad, motivo, codigo_correcto)')
         .in('id', ids.slice(i, i + 200)).order('id');
       if (error) return alert(error.message);
       for (const t of data) for (const it of t.ticket_items) {
-        rows.push([t.id, t.es_prueba ? 'Sí' : 'No', t.created_at.slice(0, 10), t.cod_suc || '', t.farmacia, t.zona || '', t.ruta || '', t.email, MOTIVOS[t.motivo], t.origen || '', t.folio, t.fecha_recepcion,
-          it.codigo, it.descripcion, it.laboratorio || '', it.factor ?? '', it.cantidad, ESTATUS[t.estatus], t.nota_atencion || '', t.atendido_por || '']);
+        rows.push([t.id, t.es_prueba ? 'Sí' : 'No', t.created_at.slice(0, 10), t.cod_suc || '', t.farmacia, t.zona || '', t.ruta || '', t.email, MOTIVOS[it.motivo || t.motivo] || '', t.origen || '', t.folio, t.fecha_recepcion,
+          it.codigo, it.descripcion, it.laboratorio || '', it.factor ?? '', it.cantidad, it.codigo_correcto || '', ESTATUS[t.estatus], t.nota_atencion || '', t.atendido_por || '']);
       }
     }
-    const head = ['Ticket', 'Prueba', 'Creado', 'Cód. sucursal', 'Sucursal', 'Zona', 'Ruta', 'Correo', 'Motivo', 'Origen', 'Folio', 'Fecha recepción', 'Código', 'Descripción', 'Laboratorio', 'Factor', 'Cantidad', 'Estatus', 'Nota atención', 'Atendió'];
+    const head = ['Ticket', 'Prueba', 'Creado', 'Cód. sucursal', 'Sucursal', 'Zona', 'Ruta', 'Correo', 'Motivo', 'Origen', 'Folio', 'Fecha recepción', 'Código', 'Descripción', 'Laboratorio', 'Factor', 'Cantidad', 'Código correcto', 'Estatus', 'Nota atención', 'Atendió'];
     const ws = XLSX.utils.aoa_to_sheet([head, ...rows]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Tickets');
@@ -454,7 +481,7 @@
     $('#dlgBody').innerHTML = '<p class="muted">Cargando…</p>';
     if (!dlg.open) dlg.showModal();
     const [{ data: t, error }, { data: hist }] = await Promise.all([
-      sb.from('tickets').select('*, ticket_items(codigo, descripcion, laboratorio, factor, cantidad)').eq('id', id).single(),
+      sb.from('tickets').select('*, ticket_items(codigo, descripcion, laboratorio, factor, cantidad, motivo, codigo_correcto)').eq('id', id).single(),
       sb.from('ticket_historial').select('*').eq('ticket_id', id).order('created_at'),
     ]);
     if (error) return ($('#dlgBody').innerHTML = `<p class="msg err">${esc(error.message)}</p>`);
@@ -463,7 +490,7 @@
       <div class="detail-grid">
         <div><small class="muted">Sucursal</small><div>${esc(t.farmacia)}${t.cod_suc ? ` (${esc(t.cod_suc)})` : ''}</div><small class="muted">${esc(t.email)}</small></div>
         ${t.zona || t.ruta ? `<div><small class="muted">Zona / Ruta</small><div>${esc([t.zona, t.ruta].filter(Boolean).join(' · '))}</div></div>` : ''}
-        <div><small class="muted">Motivo</small><div>${esc(MOTIVOS[t.motivo])}</div></div>
+        <div><small class="muted">Tipo de reclamo</small>${motivosHtml(t)}</div>
         <div><small class="muted">Origen</small><div>${esc(t.origen || '—')}</div></div>
         <div><small class="muted">Folio</small><div>${esc(t.folio)}</div></div>
         <div><small class="muted">Fecha de recepción</small><div>${fmtDate(t.fecha_recepcion)}</div></div>
@@ -471,8 +498,9 @@
         <div><small class="muted">Estatus</small><div>${badge(t.estatus)}</div></div>
       </div>
       ${t.observaciones ? `<p><small class="muted">Observaciones</small><br>${esc(t.observaciones)}</p>` : ''}
-      <table class="compact"><thead><tr><th>Código</th><th>Descripción</th><th>Laboratorio</th><th class="num">Factor</th><th class="num">Cantidad</th></tr></thead>
-      <tbody>${t.ticket_items.map((i) => `<tr><td>${esc(i.codigo)}</td><td>${esc(i.descripcion)}</td><td>${esc(i.laboratorio || '')}</td><td class="num">${esc(i.factor ?? '')}</td><td class="num">${esc(i.cantidad)}</td></tr>`).join('')}</tbody></table>
+      <table class="compact"><thead><tr><th>Código</th><th>Descripción</th><th>Tipo</th><th>Laboratorio</th><th class="num">Factor</th><th class="num">Cantidad</th></tr></thead>
+      <tbody>${t.ticket_items.map((i) => `<tr><td>${esc(i.codigo)}</td><td>${esc(i.descripcion)}${i.codigo_correcto ? `<br><small class="muted">Código correcto: <b>${esc(i.codigo_correcto)}</b></small>` : ''}</td>
+        <td><span class="motivo-tag ${esc(i.motivo || t.motivo || '')}">${esc(MOTIVOS[i.motivo || t.motivo] || '')}</span></td><td>${esc(i.laboratorio || '')}</td><td class="num">${esc(i.factor ?? '')}</td><td class="num">${esc(i.cantidad)}</td></tr>`).join('')}</tbody></table>
       ${isStaff ? `
         <form id="formStatus" class="status-form">
           <h3>Actualizar</h3>

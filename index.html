@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <title>Reclamos de Pedidos</title>
   <meta name="description" content="Portal de tickets para que las farmacias reporten diferencias en pedidos.">
-  <link rel="stylesheet" href="styles.css?v=202611180506">
+  <link rel="stylesheet" href="styles.css?v=202611180523">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230f766e'/><path d='M42 22h16v20h20v16H58v20H42V58H22V42h20z' fill='white'/></svg>">
 </head>
 <body>
@@ -80,12 +80,7 @@
             <label><input type="radio" name="tOrigen" value="CEDI" required><span>CEDI</span></label>
             <label><input type="radio" name="tOrigen" value="AMERICANA"><span>AMERICANA</span></label>
           </fieldset>
-          <div class="grid3">
-            <label>Tipo de reclamo
-              <select id="tMotivo" required>
-                <option value="">Selecciona…</option>
-              </select>
-            </label>
+          <div class="grid2">
             <label>Número de folio
               <input id="tFolio" required placeholder="Folio del pedido">
             </label>
@@ -96,7 +91,7 @@
 
           <h3>Productos</h3>
           <div class="items-head">
-            <span>Código</span><span>Descripción</span><span>Cantidad</span><span></span>
+            <span>Código</span><span>Descripción</span><span>Tipo de reclamo</span><span>Cantidad</span><span></span>
           </div>
           <div id="itemsList"></div>
           <button type="button" id="btnAddItem" class="btn ghost">+ Agregar producto</button>
@@ -269,14 +264,19 @@
         <input class="i-desc" placeholder="Se llena automáticamente" readonly tabindex="-1">
         <small class="i-hint"></small>
       </div>
-      <input class="i-cant" type="number" min="0.01" step="any" placeholder="0" required>
+      <select class="i-motivo" required aria-label="Tipo de reclamo"><option value="">Tipo de reclamo…</option></select>
+      <input class="i-cant" type="number" min="0.01" step="any" placeholder="Cant." required>
       <button type="button" class="btn ghost sm i-del" aria-label="Quitar">✕</button>
+      <label class="i-correcto-wrap hidden">Código correcto <small class="muted">(opcional: el código que debió llegar o una nota corta)</small>
+        <input class="i-correcto" maxlength="80" placeholder="Ej.: 00202518 o «llegó presentación de 500ml»">
+        <small class="i-correcto-hint"></small>
+      </label>
     </div>
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="config.js?v=202611180506"></script>
-  <script src="app.js?v=202611180506"></script>
+  <script src="config.js?v=202611180523"></script>
+  <script src="app.js?v=202611180523"></script>
 </body>
 </html>
