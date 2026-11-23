@@ -208,6 +208,79 @@
     $('#profNombre').required = otra;
   });
 
+  // ---------- Fotos ----------
+  const BUCKET = 'evidencias';
+  const MAX_FOTOS_NUEVO = 8, MAX_FOTOS_TICKET = 12;
+  // Reduce la foto a máx. 1600 px y JPEG ~75 % (de 3–5 MB a ~200–300 KB)
+  async function comprimir(file) {
+    let src;
+    try { src = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+    catch {
+      src = await new Promise((ok, fail) => {
+        const img = new Image();
+        img.onload = () => ok(img);
+        img.onerror = () => fail(new Error('Formato de imagen no soportado'));
+        img.src = URL.createObjectURL(file);
+      });
+    }
+    const w0 = src.width, h0 = src.height, k = Math.min(1, 1600 / Math.max(w0, h0));
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(w0 * k); cv.height = Math.round(h0 * k);
+    cv.getContext('2d').drawImage(src, 0, 0, cv.width, cv.height);
+    return new Promise((ok, fail) => cv.toBlob((b) => (b ? ok(b) : fail(new Error('No se pudo procesar la imagen'))), 'image/jpeg', 0.75));
+  }
+  async function subirFotos(ticketId, blobs) {
+    let fallidas = 0;
+    for (const b of blobs) {
+      const path = `${ticketId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+      const { error } = await sb.storage.from(BUCKET).upload(path, b, { contentType: 'image/jpeg', upsert: false });
+      if (error) fallidas++;
+    }
+    return fallidas;
+  }
+  async function listarFotos(ticketId) {
+    const { data, error } = await sb.storage.from(BUCKET).list(String(ticketId), { limit: 50, sortBy: { column: 'name', order: 'asc' } });
+    if (error || !data?.length) return [];
+    const paths = data.filter((f) => f.name && !f.name.startsWith('.')).map((f) => `${ticketId}/${f.name}`);
+    if (!paths.length) return [];
+    const { data: urls } = await sb.storage.from(BUCKET).createSignedUrls(paths, 3600);
+    return (urls || []).filter((u) => u.signedUrl).map((u) => ({ path: u.path, url: u.signedUrl }));
+  }
+
+  // Fotos pendientes del formulario de nuevo ticket
+  let fotosNuevas = [];
+  function renderFotosNuevas() {
+    $('#fotosPrev').innerHTML = fotosNuevas.map((f, i) => `
+      <div class="thumb"><img src="${f.url}" alt="Foto ${i + 1}"><button type="button" class="x" data-i="${i}" aria-label="Quitar foto">✕</button></div>`).join('');
+  }
+  async function agregarFotosNuevas(files) {
+    const out = $('#fotosMsg');
+    msg(out, '');
+    const libres = MAX_FOTOS_NUEVO - fotosNuevas.length;
+    const lista = [...files].slice(0, Math.max(0, libres));
+    if (files.length > lista.length) msg(out, `Máximo ${MAX_FOTOS_NUEVO} fotos por ticket.`, 'err');
+    for (const f of lista) {
+      try { const blob = await comprimir(f); fotosNuevas.push({ blob, url: URL.createObjectURL(blob) }); }
+      catch (e) { msg(out, `${f.name}: ${e.message}`, 'err'); }
+    }
+    renderFotosNuevas();
+  }
+  ['#inCam', '#inGal'].forEach((id) => $(id).addEventListener('change', async (e) => {
+    await agregarFotosNuevas(e.target.files);
+    e.target.value = '';
+  }));
+  $('#fotosPrev').addEventListener('click', (e) => {
+    const x = e.target.closest('.x');
+    if (!x) return;
+    const [f] = fotosNuevas.splice(Number(x.dataset.i), 1);
+    URL.revokeObjectURL(f.url);
+    renderFotosNuevas();
+  });
+  function limpiarFotosNuevas() {
+    fotosNuevas.forEach((f) => URL.revokeObjectURL(f.url));
+    fotosNuevas = []; renderFotosNuevas(); msg($('#fotosMsg'), '');
+  }
+
   // ---------- Farmacia: nuevo ticket ----------
   function enterFarmacia() {
     $('#farmName').textContent = '· ' + state.profile.nombre + (state.profile.codigo_sucursal ? ` (${state.profile.codigo_sucursal})` : '');
@@ -317,13 +390,20 @@
       p_items: items,
       p_cod_suc: state.preview?.cod_suc ?? null,
     });
+    if (error) { btn.disabled = false; return msg($('#ticketMsg'), error.message, 'err'); }
+    let avisoFotos = '';
+    if (fotosNuevas.length) {
+      msg($('#ticketMsg'), `Ticket #${data} creado. Subiendo ${fotosNuevas.length} foto(s)…`);
+      const fallidas = await subirFotos(data, fotosNuevas.map((f) => f.blob));
+      if (fallidas) avisoFotos = ` ${fallidas} foto(s) no se pudieron subir; agrégalas desde "Mis tickets".`;
+    }
     btn.disabled = false;
-    if (error) return msg($('#ticketMsg'), error.message, 'err');
     $('#formTicket').reset();
     $('#itemsList').innerHTML = '';
     addItem();
+    limpiarFotosNuevas();
     $$('input[name=tOrigen]').forEach((r) => (r.checked = false));
-    msg($('#ticketMsg'), `Ticket${state.preview ? ' de prueba' : ''} #${data} enviado. Puedes darle seguimiento en "Mis tickets".`, 'ok');
+    msg($('#ticketMsg'), `Ticket${state.preview ? ' de prueba' : ''} #${data} enviado. Puedes darle seguimiento en "Mis tickets".${avisoFotos}`, avisoFotos ? 'err' : 'ok');
   });
 
   // ---------- Farmacia: mis tickets ----------
@@ -512,6 +592,13 @@
           <button class="btn primary" type="submit">Guardar cambios</button>
           <p id="statusMsg" class="msg"></p>
         </form>` : (t.nota_atencion ? `<div class="note"><small class="muted">Respuesta de atención</small><br>${esc(t.nota_atencion)}</div>` : '')}
+      <h3>Fotos</h3>
+      <div id="dlgFotos" class="thumbs"><small class="muted">Cargando fotos…</small></div>
+      <div class="foto-btns" id="dlgFotoBtns" style="margin-top:.5rem">
+        <label class="btn ghost sm file-btn">📷 Tomar foto<input type="file" id="dlgCam" accept="image/*" capture="environment" hidden></label>
+        <label class="btn ghost sm file-btn">🖼️ Agregar imágenes<input type="file" id="dlgGal" accept="image/*" multiple hidden></label>
+      </div>
+      <small id="dlgFotosMsg" class="msg"></small>
       ${isStaff && t.es_prueba && state.staff?.es_admin ? `<p><button class="btn ghost sm danger" id="btnDelPrueba">Borrar este ticket de prueba</button></p>` : ''}
       <h3>Historial</h3>
       <ul class="timeline">${(hist || []).map((h) => `
@@ -521,8 +608,45 @@
           <small class="muted">${esc(h.usuario || '')}</small></li>`).join('')}</ul>`;
 
     if (t.es_prueba) $('#dlgTitle').innerHTML = `Ticket #${id} <span class="badge-prueba">PRUEBA</span>`;
+    const puedeBorrarFoto = !!state.staff?.es_admin;
+    const pintarFotos = async () => {
+      const fotos = await listarFotos(id);
+      if (!$('#dlgFotos')) return;
+      $('#dlgFotos').innerHTML = fotos.length ? fotos.map((f) => `
+        <div class="thumb"><a href="${esc(f.url)}" target="_blank" rel="noopener"><img src="${esc(f.url)}" alt="Foto del ticket" loading="lazy"></a>
+        ${puedeBorrarFoto ? `<button type="button" class="x" data-path="${esc(f.path)}" aria-label="Borrar foto">✕</button>` : ''}</div>`).join('')
+        : '<small class="muted">Sin fotos.</small>';
+      $('#dlgFotoBtns').classList.toggle('hidden', fotos.length >= MAX_FOTOS_TICKET);
+      return fotos;
+    };
+    pintarFotos();
+    const subirDesdeDetalle = async (e) => {
+      const files = [...e.target.files]; e.target.value = '';
+      if (!files.length) return;
+      const out = $('#dlgFotosMsg');
+      const actuales = $$('#dlgFotos .thumb').length;
+      const lista = files.slice(0, Math.max(0, MAX_FOTOS_TICKET - actuales));
+      if (lista.length < files.length) msg(out, `Máximo ${MAX_FOTOS_TICKET} fotos por ticket.`, 'err');
+      msg(out, `Subiendo ${lista.length} foto(s)…`);
+      const blobs = [];
+      for (const f of lista) { try { blobs.push(await comprimir(f)); } catch (err) { msg(out, `${f.name}: ${err.message}`, 'err'); } }
+      const fallidas = await subirFotos(id, blobs);
+      msg(out, fallidas ? `${fallidas} foto(s) no se pudieron subir.` : 'Fotos agregadas.', fallidas ? 'err' : 'ok');
+      pintarFotos();
+    };
+    $('#dlgCam').addEventListener('change', subirDesdeDetalle);
+    $('#dlgGal').addEventListener('change', subirDesdeDetalle);
+    $('#dlgFotos').addEventListener('click', async (e) => {
+      const x = e.target.closest('.x');
+      if (!x || !confirm('¿Borrar esta foto?')) return;
+      const { error } = await sb.storage.from(BUCKET).remove([x.dataset.path]);
+      if (error) return msg($('#dlgFotosMsg'), error.message, 'err');
+      pintarFotos();
+    });
     $('#btnDelPrueba')?.addEventListener('click', async () => {
       if (!confirm(`¿Borrar el ticket de prueba #${id}?`)) return;
+      const fotos = await listarFotos(id);
+      if (fotos.length) await sb.storage.from(BUCKET).remove(fotos.map((f) => f.path));
       const { error } = await sb.from('tickets').delete().eq('id', id).eq('es_prueba', true);
       if (error) return alert(error.message);
       $('#dlg').close();
@@ -645,7 +769,7 @@
       $('#dlg').close();
       $('#previewName').textContent = `${state.preview.nombre} (${state.preview.cod_suc})`;
       $('#previewBar').classList.remove('hidden');
-      $('#formTicket').reset(); $('#itemsList').innerHTML = ''; msg($('#ticketMsg'), '');
+      $('#formTicket').reset(); $('#itemsList').innerHTML = ''; msg($('#ticketMsg'), ''); limpiarFotosNuevas();
       $('#viewFarmacia .tab[data-tab=tabNuevo]').click();
       enterFarmacia();
     });

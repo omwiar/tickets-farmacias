@@ -73,3 +73,10 @@ Tabla `sucursales` (código, nombre, zona, ruta, teléfono, correo, transporte, 
 ## Sesión
 
 La sesión queda guardada en el navegador y **vence 12 horas** después de ingresar el código; luego se pide uno nuevo. (Se controla en `app.js`, `SESSION_MAX_MS`.)
+
+## Fotos
+
+- Bucket privado `evidencias` en Supabase Storage (1 GB en plan gratis). Ruta: `<ticket_id>/<archivo>.jpg`.
+- Al crear el ticket: **Tomar foto** (cámara) o **Subir imágenes** (galería), hasta 8. Desde el detalle se pueden agregar más (máx. 12 por ticket).
+- La app comprime cada foto a máx. 1600 px JPEG (~200–300 KB) antes de subirla.
+- Las ve solo la farmacia dueña del ticket y atención (enlaces temporales de 1 hora). El admin puede borrar fotos.

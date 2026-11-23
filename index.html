@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <title>Reclamos de Pedidos</title>
   <meta name="description" content="Portal de tickets para que las farmacias reporten diferencias en pedidos.">
-  <link rel="stylesheet" href="styles.css?v=202611180523">
+  <link rel="stylesheet" href="styles.css?v=202611220130">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230f766e'/><path d='M42 22h16v20h20v16H58v20H42V58H22V42h20z' fill='white'/></svg>">
 </head>
 <body>
@@ -95,6 +95,16 @@
           </div>
           <div id="itemsList"></div>
           <button type="button" id="btnAddItem" class="btn ghost">+ Agregar producto</button>
+
+          <div class="fotos-box">
+            <div class="fotos-title">Fotos <small class="muted">(opcional, hasta 8)</small></div>
+            <div class="foto-btns">
+              <label class="btn ghost file-btn">📷 Tomar foto<input type="file" id="inCam" accept="image/*" capture="environment" hidden></label>
+              <label class="btn ghost file-btn">🖼️ Subir imágenes<input type="file" id="inGal" accept="image/*" multiple hidden></label>
+            </div>
+            <div id="fotosPrev" class="thumbs"></div>
+            <small id="fotosMsg" class="msg"></small>
+          </div>
 
           <label>Observaciones (opcional)
             <textarea id="tObs" rows="3" placeholder="Detalles adicionales"></textarea>
@@ -276,7 +286,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="config.js?v=202611180523"></script>
-  <script src="app.js?v=202611180523"></script>
+  <script src="config.js?v=202611220130"></script>
+  <script src="app.js?v=202611220130"></script>
 </body>
 </html>
