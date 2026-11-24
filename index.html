@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <title>Reclamos de Pedidos</title>
   <meta name="description" content="Portal de tickets para que las farmacias reporten diferencias en pedidos.">
-  <link rel="stylesheet" href="styles.css?v=202611220130">
+  <link rel="stylesheet" href="styles.css?v=202611232212">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230f766e'/><path d='M42 22h16v20h20v16H58v20H42V58H22V42h20z' fill='white'/></svg>">
 </head>
 <body>
@@ -79,10 +79,11 @@
             <legend>Origen del pedido <span class="req">*</span></legend>
             <label><input type="radio" name="tOrigen" value="CEDI" required><span>CEDI</span></label>
             <label><input type="radio" name="tOrigen" value="AMERICANA"><span>AMERICANA</span></label>
+            <label><input type="radio" name="tOrigen" value="PROVEEDORES"><span>PROVEEDORES VARIOS</span></label>
           </fieldset>
           <div class="grid2">
-            <label>Número de folio
-              <input id="tFolio" required placeholder="Folio del pedido">
+            <label>Número de folio / Factura
+              <input id="tFolio" required placeholder="Folio del pedido o número de factura">
             </label>
             <label>Fecha de recepción
               <input id="tFecha" type="date" required>
@@ -97,10 +98,10 @@
           <button type="button" id="btnAddItem" class="btn ghost">+ Agregar producto</button>
 
           <div class="fotos-box">
-            <div class="fotos-title">Fotos <small class="muted">(opcional, hasta 8)</small></div>
+            <div class="fotos-title">Fotos o PDF <small class="muted">(opcional, hasta 8)</small></div>
             <div class="foto-btns">
               <label class="btn ghost file-btn">📷 Tomar foto<input type="file" id="inCam" accept="image/*" capture="environment" hidden></label>
-              <label class="btn ghost file-btn">🖼️ Subir imágenes<input type="file" id="inGal" accept="image/*" multiple hidden></label>
+              <label class="btn ghost file-btn">📎 Cargar foto o PDF<input type="file" id="inGal" accept="image/*,application/pdf,.pdf" multiple hidden></label>
             </div>
             <div id="fotosPrev" class="thumbs"></div>
             <small id="fotosMsg" class="msg"></small>
@@ -145,7 +146,7 @@
             <select id="fMotivo"><option value="">Todos los motivos</option></select>
             <select id="fZona"><option value="">Todas las zonas</option></select>
             <select id="fPrueba"><option value="">Reales y de prueba</option><option value="no">Solo reales</option><option value="si">Solo de prueba</option></select>
-            <select id="fOrigen"><option value="">Todos los orígenes</option><option>CEDI</option><option>AMERICANA</option></select>
+            <select id="fOrigen"><option value="">Todos los orígenes</option><option>CEDI</option><option>AMERICANA</option><option value="PROVEEDORES">Proveedores varios</option></select>
             <input id="fBuscar" placeholder="Buscar folio, sucursal, código o correo">
             <button class="btn ghost sm" id="btnRefreshStaff">Actualizar</button>
             <button class="btn ghost sm" id="btnExport">Exportar Excel</button>
@@ -252,6 +253,16 @@
           <p id="staffMsg" class="msg"></p>
           <div id="staffList" class="table-wrap"></div>
         </div>
+        <div class="card">
+          <h2>Notificaciones por correo</h2>
+          <p class="muted">Cuando una sucursal crea un ticket, se envía un correo según el <b>origen</b> del pedido. Si el ticket incluye algún producto con código <b>TM</b>, también se avisa a los correos de la regla TM. Separa varios correos con coma. Los tickets de prueba solo le llegan a quien los crea.</p>
+          <form id="formNotif"><div id="notifReglas"></div>
+            <div class="actions"><button class="btn primary" type="submit">Guardar notificaciones</button></div>
+          </form>
+          <p id="notifMsg" class="msg"></p>
+          <h3>Últimos envíos</h3>
+          <div id="notifLog" class="table-wrap"></div>
+        </div>
       </div>
     </section>
 
@@ -286,7 +297,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="config.js?v=202611220130"></script>
-  <script src="app.js?v=202611220130"></script>
+  <script src="config.js?v=202611232212"></script>
+  <script src="app.js?v=202611232212"></script>
 </body>
 </html>

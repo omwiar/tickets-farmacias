@@ -247,3 +247,11 @@ label.file-btn { display: inline-flex; margin: 0; color: var(--text); font-size:
 .thumb.subiendo::after { content: 'Subiendo…'; position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.45); color: #fff; font-size: .75rem; }
 @media (max-width: 720px) { .thumb { width: calc((100% - 1rem) / 3); height: auto; aspect-ratio: 1; } .foto-btns label.file-btn { flex: 1; justify-content: center; } }
 label.file-btn input[type=file] { display: none !important; }
+
+.thumb.pdf a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .2rem; text-decoration: none; color: var(--text); padding: .3rem; text-align: center; }
+.thumb.pdf .ico { font-size: 1.8rem; line-height: 1; }
+.thumb.pdf .nom { font-size: .68rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.notif-regla { display: grid; grid-template-columns: 220px 1fr; gap: .25rem 1rem; align-items: center; padding: .6rem 0; border-bottom: 1px solid var(--border); }
+.notif-regla b { display: block; }
+.notif-regla input { margin: 0; }
+@media (max-width: 720px) { .notif-regla { grid-template-columns: 1fr; } fieldset.origen label { flex: 1 1 45%; } }

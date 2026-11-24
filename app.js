@@ -25,6 +25,8 @@
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmtDate = (d) => (d ? new Date(d.length === 10 ? d + 'T00:00:00' : d).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
   const fmtDateTime = (d) => (d ? new Date(d).toLocaleString('es', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
+  const ORIGENES = { CEDI: 'CEDI', AMERICANA: 'AMERICANA', PROVEEDORES: 'Proveedores varios' };
+  const origenTxt = (o) => ORIGENES[o] || o || '';
   const motivosDe = (t) => (t.motivos?.length ? t.motivos : t.motivo ? [t.motivo] : []);
   const motivosHtml = (t) => `<div class="motivos">${motivosDe(t).map((m) => `<span class="motivo-tag ${esc(m)}">${esc(MOTIVOS[m] || m)}</span>`).join('')}</div>`;
   const badge = (e) => `<span class="badge st-${esc(e)}">${esc(ESTATUS[e] || e)}</span>`;
@@ -58,7 +60,7 @@
     tabMisTickets: () => loadMyTickets(),
     tabTickets: () => loadStaffTickets(),
     tabCatalogo: () => loadProducts(),
-    tabUsuarios: () => loadStaffUsers(),
+    tabUsuarios: () => { loadStaffUsers(); loadNotif(); },
     tabSucursales: () => loadSucursales(),
   };
 
@@ -229,38 +231,54 @@
     cv.getContext('2d').drawImage(src, 0, 0, cv.width, cv.height);
     return new Promise((ok, fail) => cv.toBlob((b) => (b ? ok(b) : fail(new Error('No se pudo procesar la imagen'))), 'image/jpeg', 0.75));
   }
-  async function subirFotos(ticketId, blobs) {
+  const MAX_PDF = 10 * 1024 * 1024;
+  const esPdf = (f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '');
+  // Convierte un archivo elegido en un adjunto listo para subir
+  async function prepararAdjunto(f) {
+    if (esPdf(f)) {
+      if (f.size > MAX_PDF) throw new Error('El PDF pesa más de 10 MB');
+      return { blob: f, tipo: 'pdf', nombre: f.name };
+    }
+    return { blob: await comprimir(f), tipo: 'img', nombre: f.name };
+  }
+  async function subirFotos(ticketId, adjuntos) {
     let fallidas = 0;
-    for (const b of blobs) {
-      const path = `${ticketId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
-      const { error } = await sb.storage.from(BUCKET).upload(path, b, { contentType: 'image/jpeg', upsert: false });
+    for (const a of adjuntos) {
+      const pdf = a.tipo === 'pdf';
+      const base = pdf ? (a.nombre || 'documento').replace(/\.pdf$/i, '').normalize('NFD').replace(/[^\w-]+/g, '_').slice(0, 40) : 'foto';
+      const path = `${ticketId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${base}.${pdf ? 'pdf' : 'jpg'}`;
+      const { error } = await sb.storage.from(BUCKET).upload(path, a.blob, { contentType: pdf ? 'application/pdf' : 'image/jpeg', upsert: false });
       if (error) fallidas++;
     }
     return fallidas;
   }
+  const nombreDePath = (p) => p.split('/').pop().replace(/^\d+-\w+-/, '');
+  const tileAdjunto = (f, borrar) => (f.tipo === 'pdf'
+    ? `<div class="thumb pdf"><a href="${esc(f.url)}" target="_blank" rel="noopener"><span class="ico">📄</span><span class="nom">${esc(f.nombre)}</span></a>${borrar || ''}</div>`
+    : `<div class="thumb"><a href="${esc(f.url)}" target="_blank" rel="noopener"><img src="${esc(f.url)}" alt="Foto del ticket" loading="lazy"></a>${borrar || ''}</div>`);
   async function listarFotos(ticketId) {
     const { data, error } = await sb.storage.from(BUCKET).list(String(ticketId), { limit: 50, sortBy: { column: 'name', order: 'asc' } });
     if (error || !data?.length) return [];
     const paths = data.filter((f) => f.name && !f.name.startsWith('.')).map((f) => `${ticketId}/${f.name}`);
     if (!paths.length) return [];
     const { data: urls } = await sb.storage.from(BUCKET).createSignedUrls(paths, 3600);
-    return (urls || []).filter((u) => u.signedUrl).map((u) => ({ path: u.path, url: u.signedUrl }));
+    return (urls || []).filter((u) => u.signedUrl).map((u) => ({ path: u.path, url: u.signedUrl, tipo: /\.pdf$/i.test(u.path) ? 'pdf' : 'img', nombre: nombreDePath(u.path) }));
   }
 
   // Fotos pendientes del formulario de nuevo ticket
   let fotosNuevas = [];
   function renderFotosNuevas() {
-    $('#fotosPrev').innerHTML = fotosNuevas.map((f, i) => `
-      <div class="thumb"><img src="${f.url}" alt="Foto ${i + 1}"><button type="button" class="x" data-i="${i}" aria-label="Quitar foto">✕</button></div>`).join('');
+    $('#fotosPrev').innerHTML = fotosNuevas.map((f, i) =>
+      tileAdjunto(f, `<button type="button" class="x" data-i="${i}" aria-label="Quitar">✕</button>`)).join('');
   }
   async function agregarFotosNuevas(files) {
     const out = $('#fotosMsg');
     msg(out, '');
     const libres = MAX_FOTOS_NUEVO - fotosNuevas.length;
     const lista = [...files].slice(0, Math.max(0, libres));
-    if (files.length > lista.length) msg(out, `Máximo ${MAX_FOTOS_NUEVO} fotos por ticket.`, 'err');
+    if (files.length > lista.length) msg(out, `Máximo ${MAX_FOTOS_NUEVO} archivos por ticket.`, 'err');
     for (const f of lista) {
-      try { const blob = await comprimir(f); fotosNuevas.push({ blob, url: URL.createObjectURL(blob) }); }
+      try { const a = await prepararAdjunto(f); a.url = URL.createObjectURL(a.blob); fotosNuevas.push(a); }
       catch (e) { msg(out, `${f.name}: ${e.message}`, 'err'); }
     }
     renderFotosNuevas();
@@ -379,7 +397,7 @@
 
     const origen = $('input[name=tOrigen]:checked')?.value;
     $('fieldset.origen').classList.toggle('invalid', !origen);
-    if (!origen) return msg($('#ticketMsg'), 'Selecciona el origen del pedido: CEDI o AMERICANA.', 'err');
+    if (!origen) return msg($('#ticketMsg'), 'Selecciona el origen del pedido: CEDI, AMERICANA o Proveedores varios.', 'err');
     const btn = $('#btnSubmitTicket'); btn.disabled = true;
     msg($('#ticketMsg'), 'Enviando…');
     const { data, error } = await sb.rpc('crear_ticket', {
@@ -393,9 +411,9 @@
     if (error) { btn.disabled = false; return msg($('#ticketMsg'), error.message, 'err'); }
     let avisoFotos = '';
     if (fotosNuevas.length) {
-      msg($('#ticketMsg'), `Ticket #${data} creado. Subiendo ${fotosNuevas.length} foto(s)…`);
-      const fallidas = await subirFotos(data, fotosNuevas.map((f) => f.blob));
-      if (fallidas) avisoFotos = ` ${fallidas} foto(s) no se pudieron subir; agrégalas desde "Mis tickets".`;
+      msg($('#ticketMsg'), `Ticket #${data} creado. Subiendo ${fotosNuevas.length} archivo(s)…`);
+      const fallidas = await subirFotos(data, fotosNuevas);
+      if (fallidas) avisoFotos = ` ${fallidas} archivo(s) no se pudieron subir; agrégalos desde "Mis tickets".`;
     }
     btn.disabled = false;
     $('#formTicket').reset();
@@ -418,10 +436,10 @@
     if (error) return (box.innerHTML = `<p class="msg err">${esc(error.message)}</p>`);
     if (!data.length) return (box.innerHTML = '<p class="muted">Aún no has creado tickets.</p>');
     box.innerHTML = `<table><thead><tr>
-      <th>#</th><th>Creado</th><th>Motivo</th><th>Origen</th><th>Folio</th><th>Recibido</th><th>Productos</th><th>Estatus</th><th>Respuesta</th>
+      <th>#</th><th>Creado</th><th>Motivo</th><th>Origen</th><th>Folio / Factura</th><th>Recibido</th><th>Productos</th><th>Estatus</th><th>Respuesta</th>
     </tr></thead><tbody>${data.map((t) => `
       <tr class="clickable" data-id="${t.id}">
-        <td>${t.id}</td><td>${fmtDate(t.created_at)}</td><td>${motivosHtml(t)}</td><td>${t.origen ? `<span class="pill-origen">${esc(t.origen)}</span>` : ''}</td>
+        <td>${t.id}</td><td>${fmtDate(t.created_at)}</td><td>${motivosHtml(t)}</td><td>${t.origen ? `<span class="pill-origen">${esc(origenTxt(t.origen))}</span>` : ''}</td>
         <td>${esc(t.folio)}</td><td>${fmtDate(t.fecha_recepcion)}</td>
         <td>${t.ticket_items?.[0]?.count ?? ''}</td><td>${badge(t.estatus)}</td>
         <td class="trunc">${esc(t.nota_atencion || '')}</td>
@@ -489,12 +507,12 @@
     const data = filteredStaffTickets();
     if (!data.length) return (box.innerHTML = '<p class="muted">No hay tickets con esos filtros.</p>');
     box.innerHTML = `<table><thead><tr>
-      <th>#</th><th>Creado</th><th>Farmacia</th><th>Motivo</th><th>Origen</th><th>Folio</th><th>Recibido</th><th>Prod.</th><th>Estatus</th><th>Atendió</th>
+      <th>#</th><th>Creado</th><th>Farmacia</th><th>Motivo</th><th>Origen</th><th>Folio / Factura</th><th>Recibido</th><th>Prod.</th><th>Estatus</th><th>Atendió</th>
     </tr></thead><tbody>${data.map((t) => `
       <tr class="clickable" data-id="${t.id}">
         <td>${t.id}${t.es_prueba ? '<br><span class="badge-prueba">PRUEBA</span>' : ''}</td><td>${fmtDate(t.created_at)}</td>
         <td><div>${esc(t.farmacia)} ${t.cod_suc ? `<small class="muted">${esc(t.cod_suc)}</small>` : ''}</div><small class="muted">${esc([t.zona, t.ruta].filter(Boolean).join(' · ') || t.email)}</small></td>
-        <td>${motivosHtml(t)}</td><td>${t.origen ? `<span class="pill-origen">${esc(t.origen)}</span>` : ''}</td><td>${esc(t.folio)}</td><td>${fmtDate(t.fecha_recepcion)}</td>
+        <td>${motivosHtml(t)}</td><td>${t.origen ? `<span class="pill-origen">${esc(origenTxt(t.origen))}</span>` : ''}</td><td>${esc(t.folio)}</td><td>${fmtDate(t.fecha_recepcion)}</td>
         <td>${t.ticket_items?.[0]?.count ?? ''}</td><td>${badge(t.estatus)}</td>
         <td><small>${esc(t.atendido_por || '')}</small></td>
       </tr>`).join('')}</tbody></table>`;
@@ -543,11 +561,11 @@
         .in('id', ids.slice(i, i + 200)).order('id');
       if (error) return alert(error.message);
       for (const t of data) for (const it of t.ticket_items) {
-        rows.push([t.id, t.es_prueba ? 'Sí' : 'No', t.created_at.slice(0, 10), t.cod_suc || '', t.farmacia, t.zona || '', t.ruta || '', t.email, MOTIVOS[it.motivo || t.motivo] || '', t.origen || '', t.folio, t.fecha_recepcion,
+        rows.push([t.id, t.es_prueba ? 'Sí' : 'No', t.created_at.slice(0, 10), t.cod_suc || '', t.farmacia, t.zona || '', t.ruta || '', t.email, MOTIVOS[it.motivo || t.motivo] || '', origenTxt(t.origen), t.folio, t.fecha_recepcion,
           it.codigo, it.descripcion, it.laboratorio || '', it.factor ?? '', it.cantidad, it.codigo_correcto || '', ESTATUS[t.estatus], t.nota_atencion || '', t.atendido_por || '']);
       }
     }
-    const head = ['Ticket', 'Prueba', 'Creado', 'Cód. sucursal', 'Sucursal', 'Zona', 'Ruta', 'Correo', 'Motivo', 'Origen', 'Folio', 'Fecha recepción', 'Código', 'Descripción', 'Laboratorio', 'Factor', 'Cantidad', 'Código correcto', 'Estatus', 'Nota atención', 'Atendió'];
+    const head = ['Ticket', 'Prueba', 'Creado', 'Cód. sucursal', 'Sucursal', 'Zona', 'Ruta', 'Correo', 'Motivo', 'Origen', 'Folio / Factura', 'Fecha recepción', 'Código', 'Descripción', 'Laboratorio', 'Factor', 'Cantidad', 'Código correcto', 'Estatus', 'Nota atención', 'Atendió'];
     const ws = XLSX.utils.aoa_to_sheet([head, ...rows]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Tickets');
@@ -571,8 +589,8 @@
         <div><small class="muted">Sucursal</small><div>${esc(t.farmacia)}${t.cod_suc ? ` (${esc(t.cod_suc)})` : ''}</div><small class="muted">${esc(t.email)}</small></div>
         ${t.zona || t.ruta ? `<div><small class="muted">Zona / Ruta</small><div>${esc([t.zona, t.ruta].filter(Boolean).join(' · '))}</div></div>` : ''}
         <div><small class="muted">Tipo de reclamo</small>${motivosHtml(t)}</div>
-        <div><small class="muted">Origen</small><div>${esc(t.origen || '—')}</div></div>
-        <div><small class="muted">Folio</small><div>${esc(t.folio)}</div></div>
+        <div><small class="muted">Origen</small><div>${esc(origenTxt(t.origen) || '—')}</div></div>
+        <div><small class="muted">Folio / Factura</small><div>${esc(t.folio)}</div></div>
         <div><small class="muted">Fecha de recepción</small><div>${fmtDate(t.fecha_recepcion)}</div></div>
         <div><small class="muted">Creado</small><div>${fmtDateTime(t.created_at)}</div></div>
         <div><small class="muted">Estatus</small><div>${badge(t.estatus)}</div></div>
@@ -592,11 +610,11 @@
           <button class="btn primary" type="submit">Guardar cambios</button>
           <p id="statusMsg" class="msg"></p>
         </form>` : (t.nota_atencion ? `<div class="note"><small class="muted">Respuesta de atención</small><br>${esc(t.nota_atencion)}</div>` : '')}
-      <h3>Fotos</h3>
+      <h3>Fotos y PDF</h3>
       <div id="dlgFotos" class="thumbs"><small class="muted">Cargando fotos…</small></div>
       <div class="foto-btns" id="dlgFotoBtns" style="margin-top:.5rem">
         <label class="btn ghost sm file-btn">📷 Tomar foto<input type="file" id="dlgCam" accept="image/*" capture="environment" hidden></label>
-        <label class="btn ghost sm file-btn">🖼️ Agregar imágenes<input type="file" id="dlgGal" accept="image/*" multiple hidden></label>
+        <label class="btn ghost sm file-btn">📎 Agregar foto o PDF<input type="file" id="dlgGal" accept="image/*,application/pdf,.pdf" multiple hidden></label>
       </div>
       <small id="dlgFotosMsg" class="msg"></small>
       ${isStaff && t.es_prueba && state.staff?.es_admin ? `<p><button class="btn ghost sm danger" id="btnDelPrueba">Borrar este ticket de prueba</button></p>` : ''}
@@ -612,10 +630,9 @@
     const pintarFotos = async () => {
       const fotos = await listarFotos(id);
       if (!$('#dlgFotos')) return;
-      $('#dlgFotos').innerHTML = fotos.length ? fotos.map((f) => `
-        <div class="thumb"><a href="${esc(f.url)}" target="_blank" rel="noopener"><img src="${esc(f.url)}" alt="Foto del ticket" loading="lazy"></a>
-        ${puedeBorrarFoto ? `<button type="button" class="x" data-path="${esc(f.path)}" aria-label="Borrar foto">✕</button>` : ''}</div>`).join('')
-        : '<small class="muted">Sin fotos.</small>';
+      $('#dlgFotos').innerHTML = fotos.length ? fotos.map((f) =>
+        tileAdjunto(f, puedeBorrarFoto ? `<button type="button" class="x" data-path="${esc(f.path)}" aria-label="Borrar">✕</button>` : '')).join('')
+        : '<small class="muted">Sin fotos ni PDF.</small>';
       $('#dlgFotoBtns').classList.toggle('hidden', fotos.length >= MAX_FOTOS_TICKET);
       return fotos;
     };
@@ -627,18 +644,18 @@
       const actuales = $$('#dlgFotos .thumb').length;
       const lista = files.slice(0, Math.max(0, MAX_FOTOS_TICKET - actuales));
       if (lista.length < files.length) msg(out, `Máximo ${MAX_FOTOS_TICKET} fotos por ticket.`, 'err');
-      msg(out, `Subiendo ${lista.length} foto(s)…`);
+      msg(out, `Subiendo ${lista.length} archivo(s)…`);
       const blobs = [];
-      for (const f of lista) { try { blobs.push(await comprimir(f)); } catch (err) { msg(out, `${f.name}: ${err.message}`, 'err'); } }
+      for (const f of lista) { try { blobs.push(await prepararAdjunto(f)); } catch (err) { msg(out, `${f.name}: ${err.message}`, 'err'); } }
       const fallidas = await subirFotos(id, blobs);
-      msg(out, fallidas ? `${fallidas} foto(s) no se pudieron subir.` : 'Fotos agregadas.', fallidas ? 'err' : 'ok');
+      msg(out, fallidas ? `${fallidas} archivo(s) no se pudieron subir.` : 'Archivos agregados.', fallidas ? 'err' : 'ok');
       pintarFotos();
     };
     $('#dlgCam').addEventListener('change', subirDesdeDetalle);
     $('#dlgGal').addEventListener('change', subirDesdeDetalle);
     $('#dlgFotos').addEventListener('click', async (e) => {
       const x = e.target.closest('.x');
-      if (!x || !confirm('¿Borrar esta foto?')) return;
+      if (!x || !confirm('¿Borrar este archivo?')) return;
       const { error } = await sb.storage.from(BUCKET).remove([x.dataset.path]);
       if (error) return msg($('#dlgFotosMsg'), error.message, 'err');
       pintarFotos();
@@ -876,6 +893,38 @@
     } catch (err) {
       msg(out, 'No se pudo leer el archivo: ' + err.message, 'err');
     }
+  });
+
+  // ---------- Admin: notificaciones por correo ----------
+  const ORDEN_REGLAS = ['CEDI', 'AMERICANA', 'PROVEEDORES', 'TM'];
+  async function loadNotif() {
+    const [{ data: reglas, error }, { data: log }] = await Promise.all([
+      sb.from('notif_reglas').select('*'),
+      sb.from('notif_log').select('*').order('created_at', { ascending: false }).limit(15),
+    ]);
+    if (error) return msg($('#notifMsg'), error.message, 'err');
+    const lista = [...reglas].sort((a, b) => ORDEN_REGLAS.indexOf(a.clave) - ORDEN_REGLAS.indexOf(b.clave));
+    $('#notifReglas').innerHTML = lista.map((r) => `
+      <div class="notif-regla"><div><b>${esc(r.clave === 'TM' ? 'Productos TM' : origenTxt(r.clave))}</b><small class="muted">${esc(r.descripcion)}</small></div>
+        <input data-clave="${esc(r.clave)}" value="${esc(r.correos.join(', '))}" placeholder="correo1@farmaciasuno.com.sv, correo2@…"></div>`).join('');
+    const est = { enviado: '✓ Enviado', error: '✕ Error', sin_destinatarios: '— Sin destinatarios' };
+    $('#notifLog').innerHTML = log?.length ? `<table class="compact"><thead><tr><th>Fecha</th><th>Ticket</th><th>Estado</th><th>Para</th><th>Detalle</th></tr></thead><tbody>
+      ${log.map((l) => `<tr><td>${fmtDateTime(l.created_at)}</td><td>#${l.ticket_id ?? ''}</td><td>${esc(est[l.estado] || l.estado)}</td>
+        <td><small>${esc((l.destinatarios || []).join(', '))}</small></td><td><small>${esc(l.detalle || '')}</small></td></tr>`).join('')}
+      </tbody></table>` : '<p class="muted">Aún no hay envíos.</p>';
+  }
+  $('#formNotif').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const out = $('#notifMsg');
+    for (const inp of $$('#notifReglas input')) {
+      const correos = inp.value.split(/[,;\s]+/).map((x) => x.trim().toLowerCase()).filter(Boolean);
+      const malos = correos.filter((x) => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
+      if (malos.length) return msg(out, `Correo no válido: ${malos.join(', ')}`, 'err');
+      const { error } = await sb.from('notif_reglas').update({ correos, updated_at: new Date().toISOString() }).eq('clave', inp.dataset.clave);
+      if (error) return msg(out, error.message, 'err');
+    }
+    msg(out, 'Notificaciones guardadas.', 'ok');
+    loadNotif();
   });
 
   // ---------- Admin: usuarios de atención ----------

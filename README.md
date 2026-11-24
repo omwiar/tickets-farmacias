@@ -80,3 +80,17 @@ La sesión queda guardada en el navegador y **vence 12 horas** después de ingre
 - Al crear el ticket: **Tomar foto** (cámara) o **Subir imágenes** (galería), hasta 8. Desde el detalle se pueden agregar más (máx. 12 por ticket).
 - La app comprime cada foto a máx. 1600 px JPEG (~200–300 KB) antes de subirla.
 - Las ve solo la farmacia dueña del ticket y atención (enlaces temporales de 1 hora). El admin puede borrar fotos.
+
+## Origen, folio/factura y PDF
+
+- Origen del pedido: **CEDI**, **AMERICANA** o **Proveedores varios** (entrega directa en sala).
+- El campo de folio acepta folio o número de **factura**.
+- Adjuntos: fotos (comprimidas) y **PDF** (máx. 10 MB).
+
+## Notificaciones por correo
+
+- Al crear un ticket, un trigger (`trg_notificar_ticket`, vía `pg_net`) llama a la Edge Function `notificar-ticket`.
+- Destinatarios según `notif_reglas`: la regla del **origen** + la regla **TM** si algún producto tiene código que empieza con TM. Se editan en *Usuarios de atención → Notificaciones por correo*.
+- Tickets de prueba: solo al admin que los creó (el correo indica a quién le llegaría en real).
+- Requiere los secretos `GMAIL_USER` y `GMAIL_APP_PASSWORD` en *Supabase → Edge Functions → Secrets*.
+- Cada envío queda en `notif_log` (visible en la misma pantalla).
